@@ -40,7 +40,9 @@ int main(void) {
     }
     close(fds[1]);
     char message[64] = {0};
-    ssize_t n = read(fds[0], message, sizeof message - 1);
+    size_t n = 0;
+    ssize_t got;
+    while (n < sizeof message - 1 && (got = read(fds[0], message + n, sizeof message - 1 - n)) > 0) n += (size_t)got;
     int status;
     assert(waitpid(child, &status, 0) == child);
     assert(WIFEXITED(status) && WEXITSTATUS(status) == 1);
