@@ -212,7 +212,7 @@ Each check belongs to one group, so CI can run the groups as parallel jobs. `GAT
 | Group | Checks |
 | --- | --- |
 | `setup` | `fixtures` and `c-build`. They run in every group, because every other group needs the fixtures and the `bgen`, `trace`, `trace-threads` and C-binary checks need `build/beagle`. |
-| `core` | `gate-tier`, `log-recording`, `make-phase`, `jcompat`, `tracker`, `oom`, `interval`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
+| `core` | `gate-tier`, `log-recording`, `make-phase`, `jcompat`, `tracker`, `oom`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
 | `bgen` | `bgen` |
 | `java` | `oracle-jar`, `failures-jar`, `log-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `trace` and `trace-threads` |
 | `cases` | `cases` |
