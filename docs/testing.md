@@ -193,9 +193,24 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 [tla/SlidingWindow.tla](../tla/SlidingWindow.tla) is the read-ahead hand-over of `src/vcf/sliding_window.c`, for 1 to 4 windows, with the reader able to fail at any window. It checks that the caller receives windows in order with none skipped, duplicated, or delivered after NULL or after an error, that an error producing window k+1 is seen only after windows 1..k were taken, that `sliding_window_close` frees `ahead` at most once and leaks no window, and that `sliding_window_next` and `sliding_window_close` always return.
 
-[tla/FatalExit.tla](../tla/FatalExit.tla) is the fatal-error lifecycle of `util_exit` and `util_oom` across the main thread, the read-ahead reader (which runs under `util_try`) and one or two parse workers. A `util_exit` under `util_try` longjmps to its frame and is raised later by the frame's consumer. A `util_exit` outside one, or a `util_oom` anywhere, calls `exit()` once and pauses every later caller. The model takes from the code that an input error is raised outside the `chrom_ids` lock and that only an allocation can fail under it. It checks that the process always terminates once a thread exits, that the reader's deferred error is raised unless another exit comes first, that the lock is released or the process ends, and that the main thread never blocks on the lock forever. `make check-oom` tests the C side of the allocation rule.
+[tla/FatalExit.tla](../tla/FatalExit.tla) is the fatal-error lifecycle of `util_exit` and `util_oom` across the main thread, the read-ahead reader (which runs under `util_try`) and one or two parse workers. A `util_exit` under `util_try` longjmps to its frame and is raised later by the frame's consumer. A `util_exit` outside one, or a `util_oom` anywhere, calls `exit()` once and pauses every later caller. The model takes from the code that an input error is raised outside the `chrom_ids` lock and that only an allocation can fail under it. It checks that the process always terminates once a thread exits, that the reader's deferred error is raised unless another exit comes first, that the lock is released or the process ends, and that the main thread never blocks on the lock forever. `make check-oom` tests the C side of the allocation rule, and the [lock check](#lock-check) tests the input-error rule for every mutex.
 
 [tla/BgenCleanup.tla](../tla/BgenCleanup.tla) is the partial-output cleanup of `src/bgen/bgen_files.c`, with `exit()` able to start at any point while the other threads keep running. It checks that once `remove_partial` ran no partial BGEN member is on disk and none is created, and that completed members survive.
+
+## Lock check
+
+`tests/check_lock_exit.py` reads the C source in `src/` and fails when a function calls anything that can reach `util_exit` while it holds a pthread mutex. Inside `util_try` that call would longjmp past the unlock. A failure names the call, the mutex and the chain of calls that reaches `util_exit`:
+
+```text
+src/vcf/block_reader.c:133: read_batches holds &r->mutex and calls read_lines > index_chrom > chrom_ids_index > util_exit
+```
+
+- `util_oom` does not count, because it exits without unwinding.
+- A callee may unlock its caller's mutex and then call `util_exit` in the same block, as `seam_file` in `src/blbutil/trace.c` does.
+- The check reads text, so it is strict where it cannot tell. Functions that share a name count as one function. A call through a struct member or a parameter counts as a call that reaches `util_exit`.
+- It does not see a call through a local function-pointer variable.
+
+The script also runs its own cases, which are small C fragments that must pass or fail.
 
 ## Benchmark
 
@@ -212,7 +227,7 @@ Each check belongs to one group, so CI can run the groups as parallel jobs. `GAT
 | Group | Checks |
 | --- | --- |
 | `setup` | `fixtures` and `c-build`. They run in every group, because every other group needs the fixtures and the `bgen`, `trace`, `trace-threads` and C-binary checks need `build/beagle`. |
-| `core` | `gate-tier`, `log-recording`, `make-phase`, `jcompat`, `tracker`, `oom`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
+| `core` | `gate-tier`, `log-recording`, `make-phase`, `lock-exit`, `jcompat`, `tracker`, `oom`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
 | `bgen` | `bgen` |
 | `java` | `oracle-jar`, `failures-jar`, `log-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `trace` and `trace-threads` |
 | `cases` | `cases` |
