@@ -432,7 +432,7 @@ typedef struct {
     window_writer *ww;
     int window, max_recs;
     out_rec *recs;
-    int *n_recs;        /* per slot, how many records its item built */
+    int *counts;        /* per slot, how many records its item built */
     out_build_fn build;
     out_trace_fn trace;
     const void *ctx;
@@ -450,14 +450,14 @@ static void pipeline_build(void *worker, int item) {
     out_rec *recs = &pl->recs[(size_t)slot * (size_t)pl->max_recs];
     int n = pl->build(pl->ctx, item, recs);
     for (int j = 0; j < n; ++j) encode(pw->wk, &recs[j]);
-    pl->n_recs[slot] = n;
+    pl->counts[slot] = n;
 }
 
 static void pipeline_put(void *ctx, int item) {
     const out_pipeline *pl = ctx;
     int slot = item % pl->window;
     out_rec *recs = &pl->recs[(size_t)slot * (size_t)pl->max_recs];
-    for (int j = 0; j < pl->n_recs[slot]; ++j) {
+    for (int j = 0; j < pl->counts[slot]; ++j) {
         if (pl->trace != NULL) pl->trace(pl->ctx, item, j, &recs[j]);
         put(pl->ww, &recs[j]);
     }

@@ -1,6 +1,6 @@
 /* Exercise the same record construction interface as both output producers,
  * then the phased driver over enough markers to wrap its ring of records and
- * leave a partial last task. */
+ * leave a partial last task. Marker positions increase in output order. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,28 +9,29 @@
 
 #define PHASED_MARKERS 1013
 
-static const char *lines[] = {
-    "22\t100\tphased\tA\tC\t.\t.\t.\tGT",
-    "22\t200\timputed\tA\tC\t.\t.\t.\tGT",
-    "22\t300\tobserved\tA\tC,G\t.\t.\tEND=301\tGT",
-    "22\t400\tmono\tA\t.\t.\t.\t.\tGT",
-    "22\t500\tfive\tA\tC,G,T,AC\t.\t.\t.\tGT"
+/* Five records of every kind, one item; FIVE_ITEMS items of them at 4 threads
+ * wrap the ring of 8 slots, so dosage records are built into reused slots. */
+#define FIVE_ITEMS 20
+static const char *five[][3] = {
+    {"phased", "C", "."},
+    {"imputed", "C", "."},
+    {"observed", "C,G", "END=301"},
+    {"mono", ".", "."},
+    {"five", "C,G,T,AC", "."}
 };
 
 typedef struct {
     const window_writer *ww;
-    const marker *mks;
+    const marker *mks;   /* FIVE_ITEMS * 5, in record order */
 } five_ctx;
 
-/* One item of the five records above, of every kind. */
 static int build_five(const void *ctx, int item, out_rec *recs) {
-    (void)item;
     const five_ctx *c = ctx;
     const samples *s = c->ww->samples;
     for (int m = 0; m < 5; ++m) {
         out_rec *r = &recs[m];
         out_rec_kind kind = m == 0 ? OUT_PHASED : m == 2 ? OUT_GENOTYPED : OUT_IMPUTED;
-        window_writer_rec_begin(c->ww, r, &c->mks[m], kind);
+        window_writer_rec_begin(c->ww, r, &c->mks[item * 5 + m], kind);
         for (int j = 0; j < s->n; ++j) {
             if (m == 0) {
                 window_writer_rec_gt(r, j == 1 ? 1 : 0, 1);
@@ -72,17 +73,22 @@ int main(int argc, char **argv) {
     window_writer ww;
     window_writer_open(&ww, &p, out, &s);
 
-    marker mks[5];
-    for (int m = 0; m < 5; ++m) marker_parse(&mks[m], lines[m], strlen(lines[m]));
+    marker mks[FIVE_ITEMS * 5];
+    for (int i = 0; i < FIVE_ITEMS * 5; ++i) {
+        char line[64];
+        int len = snprintf(line, sizeof line, "22\t%d\t%s\tA\t%s\t.\t.\t%s\tGT", i / 5 * 1000 + (i % 5 + 1) * 100,
+                five[i % 5][0], five[i % 5][1], five[i % 5][2]);
+        marker_parse(&mks[i], line, (size_t)len);
+    }
     five_ctx fc = {&ww, mks};
-    window_writer_print_records(&ww, 1, 5, build_five, NULL, &fc);
-    for (int m = 0; m < 5; ++m) marker_free(&mks[m]);
+    window_writer_print_records(&ww, FIVE_ITEMS, 5, build_five, NULL, &fc);
+    for (int i = 0; i < FIVE_ITEMS * 5; ++i) marker_free(&mks[i]);
 
     gt_rec *recs = calloc(PHASED_MARKERS, sizeof *recs);
     gt_rec **targ = malloc(PHASED_MARKERS * sizeof *targ);
     for (int m = 0; m < PHASED_MARKERS; ++m) {
         char line[64];
-        int len = snprintf(line, sizeof line, "22\t%d\tm%d\tA\tC\t.\t.\t.\tGT", 1000 + m, m);
+        int len = snprintf(line, sizeof line, "22\t%d\tm%d\tA\tC\t.\t.\t.\tGT", 100000 + m, m);
         marker_parse(&recs[m].marker, line, (size_t)len);
         targ[m] = &recs[m];
     }
