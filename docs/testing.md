@@ -156,7 +156,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 ## Sanitizers
 
-`tests/check-sanitizers.sh` builds `build/beagle` and the unit tests of `make check-bgen-unit`, `make check-records`, `make check-tracker`, `make check-block-reader` and `make check-sliding-window` with AddressSanitizer and UndefinedBehaviorSanitizer in `build/san`. It runs those tests. It then runs every oracle case at 1 and 2 threads as VCF only, with `bgen=plink2` and with `bgen=phased`. The `bgen=plink2` runs skip the cases tagged `nonautosome`, and the `bgen=phased` runs skip the cases tagged `nonfinite`. Every run must exit 0 with the oracle hash and no sanitizer report.
+`tests/check-sanitizers.sh` builds `build/beagle` and the unit tests of `make check-bgen-unit`, `make check-records`, `make check-tracker`, `make check-block-reader` and `make check-sliding-window` with AddressSanitizer and UndefinedBehaviorSanitizer in `build/san`. It runs those tests. It then runs every oracle case at 1 and 2 threads as VCF only, with `bgen=plink2` and with `bgen=phased`. The `bgen=plink2` runs skip the cases tagged `nonautosome`, and the `bgen=phased` runs skip the cases tagged `nonfinite`. The runs go `SAN_JOBS` at a time, default the CPU count, and print in table order once every run ends. Every run must exit 0 with the oracle hash and no sanitizer report.
 
 - On Linux, LeakSanitizer also runs, so any memory still allocated at a normal exit fails the check. LeakSanitizer does not support macOS arm64.
 - The build adds `-Wno-pass-failed`. clang cannot vectorise a `#pragma omp simd` loop that holds UndefinedBehaviorSanitizer checks, and `-Werror` would stop the build on its warning. The normal build keeps the warning as an error. GCC ignores the flag.

@@ -10,6 +10,8 @@
 # Usage: tests/check-sanitizers.sh
 # NTHREADS overrides the thread counts tried (default "1 2").
 # CASES restricts the run to the named cases (default all).
+# SAN_JOBS sets how many runs go at once (default the CPU count): the runs at
+# 1 and 2 threads leave cores idle otherwise.
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=cases.sh
@@ -50,27 +52,47 @@ if ASAN_OPTIONS=detect_leaks=0 python3 "$ROOT/tests/check_output_failures.py" "$
 else
   echo "FAIL sanitizer output refusals"; fail=1
 fi
-while read -r name expect tags args; do
-  selected "$name" || continue
-  for t in ${NTHREADS:-1 2}; do
-    for mode in vcf plink2 phased; do
-      [ "$mode" = plink2 ] && has_tag "$tags" nonautosome && continue
-      [ "$mode" = phased ] && has_tag "$tags" nonfinite && continue
-      bgen=()
-      [ "$mode" = vcf ] || bgen=(bgen="$mode")
-      out="$OUT/$name.t$t.$mode"
-      case_verdict "$expect" "$args" "$out" "$t" "$SAN/build/beagle" ${bgen[@]+"${bgen[@]}"}
-      ok=$?
-      if grep -Eq "$REPORT" "$out.run.log"; then
-        echo "FAIL $name nthreads=$t $mode: sanitizer report"; grep -E -A12 "$REPORT" "$out.run.log" | head -40; fail=1
-      elif [ $ok -eq 0 ]; then
-        echo "PASS $name nthreads=$t $mode"
-      else
-        echo "FAIL $name nthreads=$t $mode $VERDICT"; tail -5 "$out.run.log"; fail=1
-      fi
+# The runs, one per line: name expect tags nthreads mode args...
+runs() {
+  while read -r name expect tags args; do
+    selected "$name" || continue
+    for t in ${NTHREADS:-1 2}; do
+      for mode in vcf plink2 phased; do
+        [ "$mode" = plink2 ] && has_tag "$tags" nonautosome && continue
+        [ "$mode" = phased ] && has_tag "$tags" nonfinite && continue
+        echo "$name $expect $tags $t $mode $args"
+      done
     done
-  done
-done < <(cases)
+  done < <(cases)
+}
+# One run: prints its PASS or FAIL lines and returns 1 on FAIL. xargs runs it
+# in a child bash, so it and what it calls are exported below.
+# shellcheck disable=SC2329  # runs through xargs
+run() {  # name expect tags nthreads mode args...
+  local name=$1 expect=$2 t=$4 mode=$5 out bgen=() ok; shift 5
+  out="$OUT/$name.t$t.$mode"
+  [ "$mode" = vcf ] || bgen=(bgen="$mode")
+  case_verdict "$expect" "$*" "$out" "$t" "$SAN/build/beagle" ${bgen[@]+"${bgen[@]}"}
+  ok=$?
+  if grep -Eq "$REPORT" "$out.run.log"; then
+    echo "FAIL $name nthreads=$t $mode: sanitizer report"; grep -E -A12 "$REPORT" "$out.run.log" | head -40; return 1
+  elif [ "$ok" -eq 0 ]; then
+    echo "PASS $name nthreads=$t $mode"
+  else
+    echo "FAIL $name nthreads=$t $mode $VERDICT"; tail -5 "$out.run.log"; return 1
+  fi
+}
+export -f run case_verdict case_run vcf_hash want_hash thread_dependent
+export OUT SAN REPORT DATA SEED SHA
+runs > "$OUT/runs"
+# Each run's lines go to its own file, printed in table order once every run ends.
+# shellcheck disable=SC2016  # the child bash expands the variables
+xargs -P "${SAN_JOBS:-$(getconf _NPROCESSORS_ONLN)}" -L1 \
+  bash -c 'run "$@" > "$OUT/$1.t$4.$5.lines" 2>&1 || touch "$OUT/$1.t$4.$5.fail"' _ < "$OUT/runs"
+while read -r name _ _ t mode _; do
+  cat "$OUT/$name.t$t.$mode.lines"
+  [ ! -e "$OUT/$name.t$t.$mode.fail" ] || fail=1
+done < "$OUT/runs"
 
 [ $leaks -eq 1 ] && echo "leak checking on" || echo "leak checking off (not supported on $(uname -s) $(uname -m))"
 exit $fail
