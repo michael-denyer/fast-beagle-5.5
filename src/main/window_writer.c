@@ -237,9 +237,10 @@ static void hom_ref_fields(kstring_t *fields, bool ap, bool gp) {
     }
 }
 
-struct out_worker {
+/* One thread's working buffers for encode. */
+typedef struct {
     bgen_scratch *scratch;   /* NULL without bgen= */
-};
+} out_worker;
 
 /* Writes ww->line followed by a newline and empties it. */
 static void write_line(window_writer *ww) {
@@ -342,7 +343,7 @@ void window_writer_rec_begin(const window_writer *ww, out_rec *r, const marker *
     }
 }
 
-void window_writer_rec_free(out_rec *r) {
+static void rec_free(out_rec *r) {
     free(r->sum_al_probs);
     free(r->sum_al_probs2);
     free(r->info.s);
@@ -378,26 +379,28 @@ void window_writer_rec_probs(out_rec *r, float *p1, float *p2) {
     capture_call(r, c);
 }
 
-out_worker *window_writer_worker_new(const window_writer *ww) {
+static out_worker *worker_new(const window_writer *ww) {
     out_worker *wk = util_malloc(sizeof *wk);
     wk->scratch = ww->bgen != NULL ? bgen_scratch_new(ww->bgen) : NULL;
     return wk;
 }
 
-void window_writer_worker_free(out_worker *wk) {
+static void worker_free(out_worker *wk) {
     if (wk->scratch != NULL) bgen_scratch_free(wk->scratch);
     free(wk);
 }
 
-void window_writer_encode(out_worker *wk, out_rec *r) {
+/* Completes INFO, checks the sample count and encodes BGEN on any thread,
+ * once every sample has been added. */
+static void encode(out_worker *wk, out_rec *r) {
     if (r->n_samples != r->writer->samples->n || r->hap_cnt != r->writer->n_haps)
         util_exit("java.lang.IllegalStateException: inconsistent data");
     if (r->kind != OUT_PHASED) put_info(r, r->kind == OUT_IMPUTED, r->writer->n_haps, &r->info);
     if (r->bgen != NULL) bgen_writer_encode(r->writer->bgen, wk->scratch, (span){r->info.s, (int)r->info.l}, r->bgen);
 }
 
-/* Marker.toString, then the record's fields. */
-void window_writer_put(window_writer *ww, out_rec *r) {
+/* Marker.toString, then the record's fields, to every output. */
+static void put(window_writer *ww, out_rec *r) {
     kstring_t *l = &ww->line;
     const marker *mk = r->mk;
     kputs(marker_chrom(mk), l);
@@ -420,73 +423,97 @@ void window_writer_put(window_writer *ww, out_rec *r) {
     if (ww->bgen != NULL) bgen_writer_put(ww->bgen, r->bgen);
 }
 
-/* WindowWriter.printPhased(Stage2Haps, ...) formats 50 records per task. At
- * most PHASED_SLOTS_PER_THREAD * nthreads tasks' records are held at once. */
-#define PHASED_STEP 50
-#define PHASED_SLOTS_PER_THREAD 2
+/* Items built but not yet written, per thread: bounds the records held in
+ * memory while giving each thread room to run ahead of a slow item. */
+#define SLOTS_PER_THREAD 2
 
+/* Item i's records are in slot i % window, max_recs records per slot. */
 typedef struct {
     window_writer *ww;
+    int window, max_recs;
+    out_rec *recs;
+    int *n_recs;        /* per slot, how many records its item built */
+    out_build_fn build;
+    out_trace_fn trace;
+    const void *ctx;
+} out_pipeline;
+
+typedef struct {
+    const out_pipeline *pl;
+    out_worker *wk;
+} pipeline_worker;
+
+static void pipeline_build(void *worker, int item) {
+    const pipeline_worker *pw = worker;
+    const out_pipeline *pl = pw->pl;
+    int slot = item % pl->window;
+    out_rec *recs = &pl->recs[(size_t)slot * (size_t)pl->max_recs];
+    int n = pl->build(pl->ctx, item, recs);
+    for (int j = 0; j < n; ++j) encode(pw->wk, &recs[j]);
+    pl->n_recs[slot] = n;
+}
+
+static void pipeline_put(void *ctx, int item) {
+    const out_pipeline *pl = ctx;
+    int slot = item % pl->window;
+    out_rec *recs = &pl->recs[(size_t)slot * (size_t)pl->max_recs];
+    for (int j = 0; j < pl->n_recs[slot]; ++j) {
+        if (pl->trace != NULL) pl->trace(pl->ctx, item, j, &recs[j]);
+        put(pl->ww, &recs[j]);
+    }
+}
+
+void window_writer_print_records(window_writer *ww, int n_items, int max_recs, out_build_fn build, out_trace_fn trace,
+        const void *ctx) {
+    int n_threads = ww->nthreads;
+    int window = SLOTS_PER_THREAD * n_threads;
+    size_t n_recs = (size_t)window * (size_t)max_recs;
+    out_rec *recs = util_malloc(n_recs * sizeof *recs);
+    for (size_t j = 0; j < n_recs; ++j) recs[j] = (out_rec){0};
+    int *counts = util_malloc((size_t)window * sizeof *counts);
+    out_pipeline pl = {ww, window, max_recs, recs, counts, build, trace, ctx};
+    pipeline_worker *pws = util_malloc((size_t)n_threads * sizeof *pws);
+    for (int t = 0; t < n_threads; ++t) pws[t] = (pipeline_worker){&pl, worker_new(ww)};
+    parallel_ordered(n_threads, n_items, window, pws, sizeof *pws, pipeline_build, &pl, pipeline_put);
+    for (int t = 0; t < n_threads; ++t) worker_free(pws[t].wk);
+    for (size_t j = 0; j < n_recs; ++j) rec_free(&recs[j]);
+    free(pws);
+    free(counts);
+    free(recs);
+}
+
+/* WindowWriter.printPhased(Stage2Haps, ...) formats 50 records per task. */
+#define PHASED_STEP 50
+
+typedef struct {
+    const window_writer *ww;
     const window *w;
     int start, end;
     phased_allele_fn allele;
     const void *ctx;
-    int window;
-    out_rec *recs;  /* task i's records in slot i % window, PHASED_STEP per slot */
 } phased_ctx;
 
-typedef struct {
-    const phased_ctx *c;
-    out_worker *wk;
-} phased_worker;
-
-/* Task item's first record, and its target markers in [*m_start, *m_end). */
-static out_rec *phased_task(const phased_ctx *c, int item, int *m_start, int *m_end) {
-    *m_start = c->start + item * PHASED_STEP;
-    *m_end = c->end - *m_start < PHASED_STEP ? c->end : *m_start + PHASED_STEP;
-    return &c->recs[(size_t)(item % c->window) * PHASED_STEP];
-}
-
-static void phased_build(void *worker, int item) {
-    const phased_worker *pw = worker;
-    const phased_ctx *c = pw->c;
+static int phased_build(const void *ctx, int item, out_rec *recs) {
+    const phased_ctx *c = ctx;
     const window_writer *ww = c->ww;
-    int m_start, m_end;
-    out_rec *r = phased_task(c, item, &m_start, &m_end);
-    for (int m = m_start; m < m_end; ++m, ++r) {
-        window_writer_rec_begin(ww, r, &c->w->targ[m]->marker, OUT_PHASED);
+    int m_start = c->start + item * PHASED_STEP;
+    int m_end = c->end - m_start < PHASED_STEP ? c->end : m_start + PHASED_STEP;
+    for (int m = m_start; m < m_end; ++m, ++recs) {
+        window_writer_rec_begin(ww, recs, &c->w->targ[m]->marker, OUT_PHASED);
         for (int s = 0; s < ww->samples->n; ++s) {
             int h1 = s << 1;
             int a1 = c->allele(c->ctx, m, h1), a2 = 0;
             if (ww->samples->is_diploid[s]) a2 = c->allele(c->ctx, m, h1 | 1);
-            window_writer_rec_gt(r, a1, a2);
+            window_writer_rec_gt(recs, a1, a2);
         }
-        window_writer_encode(pw->wk, r);
     }
-}
-
-static void phased_put(void *ctx, int item) {
-    const phased_ctx *c = ctx;
-    int m_start, m_end;
-    out_rec *r = phased_task(c, item, &m_start, &m_end);
-    for (int m = m_start; m < m_end; ++m, ++r) window_writer_put(c->ww, r);
+    return m_end - m_start;
 }
 
 void window_writer_print_phased(window_writer *ww, const window *w, int start, int end, phased_allele_fn allele, const void *ctx) {
-    int n_threads = ww->nthreads;
-    int window = PHASED_SLOTS_PER_THREAD * n_threads;
-    size_t n_recs = (size_t)window * PHASED_STEP;
-    out_rec *recs = util_malloc(n_recs * sizeof *recs);
-    for (size_t j = 0; j < n_recs; ++j) recs[j] = (out_rec){0};
-    phased_ctx c = {ww, w, start, end, allele, ctx, window, recs};
-    phased_worker *pws = util_malloc((size_t)n_threads * sizeof *pws);
-    for (int t = 0; t < n_threads; ++t) pws[t] = (phased_worker){&c, window_writer_worker_new(ww)};
+    phased_ctx c = {ww, w, start, end, allele, ctx};
     int n_tasks = (end - start + PHASED_STEP - 1) / PHASED_STEP;
-    parallel_ordered(n_threads, n_tasks, window, pws, sizeof *pws, phased_build, &c, phased_put);
-    for (int t = 0; t < n_threads; ++t) window_writer_worker_free(pws[t].wk);
-    for (size_t j = 0; j < n_recs; ++j) window_writer_rec_free(&recs[j]);
-    free(pws);
-    free(recs);
+    window_writer_print_records(ww, n_tasks, PHASED_STEP, phased_build, NULL, &c);
 }
 
 void window_writer_close(window_writer *ww) {

@@ -182,7 +182,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 `tests/check-tla.sh` model-checks the TLA+ specs in `tla/` with TLC from tla2tools.jar v1.7.4 over a matrix of small constants. `tests/check-tla.sh BlockReader` runs one spec. The three protocol models take each critical section as one step. They represent a condition-variable wait as a wait set that only a broadcast or a spurious wakeup leaves, so a lost wakeup fails a liveness property. The specs name the C functions they model.
 
-[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (the pipelined imputed writer and the phased-record writer), for several worker counts, item counts and windows. It checks that:
+[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (under `window_writer_print_records`, which the phased and the imputed writer print through), for several worker counts, item counts and windows. It checks that:
 
 - at most `window` items are claimed but not consumed
 - no slot is overwritten before it is consumed

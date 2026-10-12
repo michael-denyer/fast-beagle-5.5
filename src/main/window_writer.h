@@ -63,10 +63,10 @@ typedef struct {
     uint64_t digest;
 } out_rec;
 
-/* Readies a zero-initialised record, or one already put, keeping its buffers.
- * ww and mk must outlive the record. All construction can run on workers. */
+/* Readies a zero-initialised record, or one already written, keeping its
+ * buffers. ww and mk must outlive the record. All construction can run on
+ * workers. */
 void window_writer_rec_begin(const window_writer *ww, out_rec *r, const marker *mk, out_rec_kind kind);
-void window_writer_rec_free(out_rec *r);
 /* Add samples in the writer's sample order. _gt is for OUT_PHASED; a2 is
  * ignored for haploid samples. _probs is for dosage records, scales its
  * arrays in place and captures both outputs before returning. p2 is ignored
@@ -76,15 +76,20 @@ void window_writer_rec_probs(out_rec *r, float *p1, float *p2);
 /* T5d, emitted in record order after worker construction. */
 void window_writer_rec_trace(const out_rec *r, int cluster, int marker_index);
 
-/* One thread's working buffers for window_writer_encode. */
-typedef struct out_worker out_worker;
-out_worker *window_writer_worker_new(const window_writer *ww);
-void window_writer_worker_free(out_worker *wk);
-/* Completes INFO, checks the sample count and encodes BGEN on any thread,
- * once every sample has been added. */
-void window_writer_encode(out_worker *wk, out_rec *r);
-/* Writes an encoded record to every output. Records are put in VCF order. */
-void window_writer_put(window_writer *ww, out_rec *r);
+/* Builds item's records in recs, at most max_recs of them, each zeroed or
+ * already written, and returns how many. Called on the writer's threads at
+ * once. */
+typedef int (*out_build_fn)(const void *ctx, int item, out_rec *recs);
+/* Called with record j of item, in record order on the calling thread, just
+ * before the record is written. */
+typedef void (*out_trace_fn)(const void *ctx, int item, int j, const out_rec *r);
+/* fast-beagle only: the records of items [0, n_items), built on nthreads
+ * threads in any order, encoded on the thread that built them, and written
+ * to every output in item order, through trace when it is not NULL. At most
+ * 2 * nthreads items' records are held at once. Every record must have every
+ * sample when its item's build returns. */
+void window_writer_print_records(window_writer *ww, int n_items, int max_recs, out_build_fn build, out_trace_fn trace,
+        const void *ctx);
 
 /* WindowWriter.printPhased: records for target markers [start, end) of w,
  * haploid samples with one allele, formatted on nthreads threads and written

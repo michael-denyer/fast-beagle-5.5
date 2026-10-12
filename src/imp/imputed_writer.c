@@ -230,14 +230,9 @@ typedef struct {
     const ref_hap_hash *rh;
 } piece;
 
-/* A piece's records, built on a worker thread and written in piece order. */
-typedef struct {
-    int n;
-    out_rec *recs;
-} piece_recs;
-
-static void build_piece(piece_recs *out, const window_writer *ww, out_worker *wk, const imp_data *id,
-        const state_probs *sp, const piece *pc) {
+/* The piece's records, into recs; returns how many. */
+static int build_piece(out_rec *recs, const window_writer *ww, const imp_data *id, const state_probs *sp,
+        const piece *pc) {
     const window *w = id->w;
     int cluster = pc->cluster, ref_start = pc->start, clust_end = pc->clust_end;
     ref_hap_hash own;
@@ -251,7 +246,6 @@ static void build_piece(piece_recs *out, const window_writer *ww, out_worker *wk
         scan_alleles(rh, id, ref_start, pc->end, NULL, &al);
     }
     int n = pc->end - ref_start;
-    out_rec *recs = util_malloc((size_t)n * sizeof *recs);
     float **a1 = util_malloc((size_t)n * sizeof *a1);
     float **a2 = util_malloc((size_t)n * sizeof *a2);
     bool *is_imputed = util_malloc((size_t)n * sizeof *is_imputed);
@@ -264,7 +258,6 @@ static void build_piece(piece_recs *out, const window_writer *ww, out_worker *wk
     for (int mm = 0, off = 0; mm < n; ++mm) {
         const marker *mk = &w->ref[ref_start + mm]->marker;
         int n_al = marker_n_alleles(mk);
-        recs[mm] = (out_rec){0};
         is_imputed[mm] = w->indices.marker_to_targ_marker[ref_start + mm] == -1;
         window_writer_rec_begin(ww, &recs[mm], mk, is_imputed[mm] ? OUT_IMPUTED : OUT_GENOTYPED);
         a1[mm] = probs1 + off;
@@ -301,8 +294,6 @@ static void build_piece(piece_recs *out, const window_writer *ww, out_worker *wk
             for (int a = 0; a < n_al; ++a) a1[mm][a] = a2[mm][a] = 0.0f;
         }
     }
-    for (int mm = 0; mm < n; ++mm) window_writer_encode(wk, &recs[mm]);
-    *out = (piece_recs){n, recs};
     free(is_imputed);
     free(a1);
     free(a2);
@@ -315,11 +306,8 @@ static void build_piece(piece_recs *out, const window_writer *ww, out_worker *wk
     free(seq_probs_p1);
     alt_lists_free(&al, rh->n);
     if (rh == &own) ref_hap_hash_free(&own);
+    return n;
 }
-
-/* Pieces built but not yet printed, per thread: bounds the records held
- * in memory while giving each thread room to run ahead of a slow piece. */
-#define WINDOW_PER_THREAD 2
 
 /* A cluster split into more than one piece, and its hash, which its pieces
  * share. */
@@ -330,44 +318,27 @@ typedef struct {
 } split_cluster;
 
 typedef struct {
-    window_writer *ww;
+    const window_writer *ww;
     const imp_data *id;
     const state_probs *sp;
     const piece *pieces;
     split_cluster *splits;
-    int window;
-    piece_recs *recs;  /* piece i in slot i % window */
 } build_ctx;
 
-/* One thread's context: the shared inputs and its own output buffers. */
-typedef struct {
-    const build_ctx *c;
-    out_worker *wk;
-} build_worker;
-
-static void hash_task(void *worker, int split) {
-    const build_ctx *c = ((const build_worker *)worker)->c;
+static void hash_task(void *ctx, int split) {
+    const build_ctx *c = ctx;
     split_cluster *sc = &c->splits[split];
     ref_hap_hash_init(&sc->rh, NULL, c->id, c->sp, sc->cluster, sc->start, sc->end);
 }
 
-static void build_task(void *worker, int item) {
-    const build_worker *bwk = worker;
-    const build_ctx *c = bwk->c;
-    build_piece(&c->recs[item % c->window], c->ww, bwk->wk, c->id, c->sp, &c->pieces[item]);
+static int build_item(const void *ctx, int item, out_rec *recs) {
+    const build_ctx *c = ctx;
+    return build_piece(recs, c->ww, c->id, c->sp, &c->pieces[item]);
 }
 
-static void print_task(void *ctx, int item) {
+static void trace_item(const void *ctx, int item, int j, const out_rec *r) {
     const build_ctx *c = ctx;
-    const piece *pc = &c->pieces[item];
-    piece_recs *pr = &c->recs[item % c->window];
-    for (int mm = 0; mm < pr->n; ++mm) {
-        out_rec *rb = &pr->recs[mm];
-        if (trace_on()) window_writer_rec_trace(rb, pc->cluster, pc->start + mm);
-        window_writer_put(c->ww, rb);
-        window_writer_rec_free(rb);
-    }
-    free(pr->recs);
+    window_writer_rec_trace(r, c->pieces[item].cluster, c->pieces[item].start + j);
 }
 
 /* Splits the window's clusters into pieces of at most PIECE_RECORDS
@@ -403,21 +374,13 @@ static piece *make_pieces(const imp_data *id, int start, int end, int *n_pieces,
 }
 
 void imputed_writer_print(window_writer *ww, const imp_data *id, const state_probs *sp, const par *p, int start, int end) {
-    int n_workers = p->nthreads;
-    int window = WINDOW_PER_THREAD * n_workers;
     int n_pieces, n_splits;
     split_cluster *splits;
     piece *pieces = make_pieces(id, start, end, &n_pieces, &splits, &n_splits);
-    piece_recs *recs = util_malloc((size_t)window * sizeof *recs);
-    build_ctx ctx = {ww, id, sp, pieces, splits, window, recs};
-    build_worker *bwks = util_malloc((size_t)n_workers * sizeof *bwks);
-    for (int t = 0; t < n_workers; ++t) bwks[t] = (build_worker){&ctx, window_writer_worker_new(ww)};
-    parallel_for(n_workers, n_splits, bwks, sizeof *bwks, hash_task);
-    parallel_ordered(n_workers, n_pieces, window, bwks, sizeof *bwks, build_task, &ctx, print_task);
-    for (int t = 0; t < n_workers; ++t) window_writer_worker_free(bwks[t].wk);
+    build_ctx ctx = {ww, id, sp, pieces, splits};
+    parallel_for(p->nthreads, n_splits, &ctx, 0, hash_task);
+    window_writer_print_records(ww, n_pieces, PIECE_RECORDS, build_item, trace_on() ? trace_item : NULL, &ctx);
     for (int s = 0; s < n_splits; ++s) ref_hap_hash_free(&splits[s].rh);
     free(splits);
     free(pieces);
-    free(bwks);
-    free(recs);
 }
