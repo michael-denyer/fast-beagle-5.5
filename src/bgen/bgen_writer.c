@@ -327,7 +327,7 @@ void bgen_pack_bits(const uint32_t *v, size_t n, int bits, uint8_t *out) {
 /* Appends v[0, n) packed at bits each. */
 static void put_bits(kstring_t *b, const uint32_t *v, size_t n, int bits) {
     size_t len = (n * (size_t)bits + 7) / 8;
-    if (ks_resize(b, b->l + len) != 0) util_exit("Out of memory");
+    if (ks_resize(b, b->l + len) != 0) util_oom();
     bgen_pack_bits(v, n, bits, (uint8_t *)b->s + b->l);
     b->l += len;
 }

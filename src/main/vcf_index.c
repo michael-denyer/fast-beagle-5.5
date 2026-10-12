@@ -154,7 +154,7 @@ static void set_meta(hts_idx_t *idx, const str_set *chroms) {
         memcpy(meta + l, str_set_get(chroms, t), k);
         l += k;
     }
-    if (hts_idx_set_meta(idx, (uint32_t)l, meta, 0) != 0) util_exit("Out of memory");
+    if (hts_idx_set_meta(idx, (uint32_t)l, meta, 0) != 0) util_oom();
 }
 
 void vcf_index_write(vcf_index *x, uint64_t u_total) {
@@ -162,7 +162,7 @@ void vcf_index_write(vcf_index *x, uint64_t u_total) {
     bgzf_blocks bl = {.f = hopen(vcf_path, "r"), .path = vcf_path};
     if (bl.f == NULL) util_exit("Error opening %s", vcf_path);
     hts_idx_t *idx = hts_idx_init(0, HTS_FMT_TBI, voffset(&bl, x->u_header_end), 14, 5);
-    if (idx == NULL) util_exit("Out of memory");
+    if (idx == NULL) util_oom();
     for (size_t j = 0; j < x->n_recs; ++j) {
         const index_rec *r = &x->recs[j];
         if (hts_idx_push(idx, r->tid, r->beg, r->end, voffset(&bl, r->u_end), 1) < 0)

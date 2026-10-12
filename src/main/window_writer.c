@@ -326,7 +326,7 @@ void window_writer_rec_begin(const window_writer *ww, out_rec *r, const marker *
     r->info.l = 0;
     r->fields.l = 0;
     /* allocated even when empty, as the outputs memcpy from info.s */
-    if (ks_resize(&r->info, 32) != 0) util_exit("Out of memory");
+    if (ks_resize(&r->info, 32) != 0) util_oom();
     if (ww->bgen != NULL) r->bgen = bgen_rec_begin(ww->bgen, r->bgen, mk);
     if (kind == OUT_PHASED) {
         put_span(marker_info(mk), &r->info);

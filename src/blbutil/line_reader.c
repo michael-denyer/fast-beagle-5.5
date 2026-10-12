@@ -105,7 +105,7 @@ static bool fill(line_reader *r) {
 
 bool line_reader_next_raw(line_reader *r, kstring_t *line) {
     line->l = 0;
-    if (kputsn("", 0, line) < 0) util_exit("Out of memory");  /* line->s is never NULL */
+    if (kputsn("", 0, line) < 0) util_oom();  /* line->s is never NULL */
     bool any = false;
     for (;;) {
         if (r->pos == r->len && !fill(r)) break;
@@ -125,7 +125,7 @@ bool line_reader_next_raw(line_reader *r, kstring_t *line) {
             const char *cr = memchr(start, '\r', i);
             if (cr != NULL) i = (size_t)(cr - start);
         }
-        if (kputsn(start, i, line) < 0) util_exit("Out of memory");
+        if (kputsn(start, i, line) < 0) util_oom();
         if (i == avail) {
             r->pos = r->len;
             continue;
