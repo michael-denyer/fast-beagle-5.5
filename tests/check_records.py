@@ -47,14 +47,14 @@ def main():
         # The same five records again from every other item, with the ring's
         # dosage records reused: 20 items at 4 threads wrap 8 slots twice.
         for i in range(FIVE_ITEMS):
-            for k, row in enumerate(outputs[0][5 * i:5 * i + 5]):
+            for k, row in enumerate(outputs[0][5 * i : 5 * i + 5]):
                 assert row[1] == str(i * 1000 + (k + 1) * 100), (i, k, row[:2])
                 assert row[2:] == outputs[0][k][2:], (i, k)
         print(f"PASS phased, imputed, observed, haploid and multiallelic records, {FIVE_ITEMS} times")
 
         # The phased driver's rows, in marker order, each from the fixture's
         # allele function: haplotype hap's allele is bit hap % 4 of the marker.
-        rows = outputs[0][5 * FIVE_ITEMS:]
+        rows = outputs[0][5 * FIVE_ITEMS :]
         assert len(rows) == PHASED_MARKERS
         for m, row in enumerate(rows):
             a = [(m >> (hap % 4)) & 1 for hap in range(6)]
