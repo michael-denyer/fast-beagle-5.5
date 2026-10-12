@@ -109,13 +109,13 @@ step core markers make check-markers
 step core block-reader make check-block-reader
 step core sliding-window make check-sliding-window
 step core snv-perms make check-snv-perms
-step full java oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.27Feb25.75f.jar
-step full java failures-jar tests/check-failures.sh java -ea -jar data/beagle.27Feb25.75f.jar
-step full java log-jar tests/check-log.sh java -ea -jar data/beagle.27Feb25.75f.jar
-step full java java-build java_build
-step full java oracle-source tests/check-oracle.sh java -ea -cp build/classes main.Main
-step full java java-trace make java-trace
-step full java oracle-trace oracle_trace
+step full java-jar oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.27Feb25.75f.jar
+step full java-jar failures-jar tests/check-failures.sh java -ea -jar data/beagle.27Feb25.75f.jar
+step full java-jar log-jar tests/check-log.sh java -ea -jar data/beagle.27Feb25.75f.jar
+step full java-source java-build java_build
+step full java-source oracle-source tests/check-oracle.sh java -ea -cp build/classes main.Main
+step full trace java-trace make java-trace
+step full trace oracle-trace oracle_trace
 step setup c-build make build/beagle
 step core oracle-c tests/check-oracle.sh build/beagle
 step core gate-planning tests/check-gate-planning.sh
@@ -130,13 +130,13 @@ step core vcf-index make check-vcf-index
 step core tbi make check-tbi
 step bgen bgen env BGEN_ORACLE="$bgen_oracle" tests/check-bgen.sh
 # shellcheck disable=SC2086  # the seam list splits into arguments
-step full java trace tests/check-trace.sh $SEAMS
+step full trace trace tests/check-trace.sh $SEAMS
 step sanitizers sanitizers tests/check-sanitizers.sh
 step macos tsan tsan tests/check-tsan.sh
 step full core tla tests/check-tla.sh
 step full core fuzz uv run --python 3.12 --script tests/check_fuzz.py "${fuzz_args[@]}"
 step c core fuzz-regressions uv run --python 3.12 --script tests/check_fuzz.py --examples 0 --invalid-examples 0
-step full java trace-threads trace_threads
+step full trace trace-threads trace_threads
 }
 
 mode=declare declared=()

@@ -20,12 +20,12 @@ gate() {  # root VAR=value...
 }
 
 expect "full-tier groups" "$(gate "$ROOT" GATE_LIST_GROUPS=1 GATE_TIER=full)" \
-  $'core\ncases\njava\nbgen\nsanitizers\ntsan'
+  $'core\ncases\njava-jar\njava-source\ntrace\nbgen\nsanitizers\ntsan'
 expect "C-tier groups" "$(gate "$ROOT" GATE_LIST_GROUPS=1 GATE_TIER=c)" \
   $'core\nbgen\nsanitizers\ntsan'
 expect "undeclared group rejected" \
   "$(gate "$ROOT" GATE_GROUP=not-a-group GATE_LIST=1 > /dev/null 2>&1; echo $?)" 2
-expect "full-only group is a C-tier no-op" "$(gate "$ROOT" GATE_TIER=c GATE_GROUP=java GATE_LIST=1)" \
+expect "full-only group is a C-tier no-op" "$(gate "$ROOT" GATE_TIER=c GATE_GROUP=java-jar GATE_LIST=1)" \
   $'setup fixtures\nsetup c-build'
 expect "setup and selected checks keep declaration order" \
   "$(gate "$ROOT" GATE_TIER=full GATE_GROUP=bgen GATE_LIST=1)" $'setup fixtures\nsetup c-build\nbgen bgen'
@@ -48,7 +48,7 @@ chmod +x "$tmp/linux/uname" "$tmp/darwin/uname"
 expect "C-only group is planned in the C tier" "$(gate "$tmp/fixture" GATE_LIST_GROUPS=1 GATE_TIER=c)" \
   $'core\nbgen\nsanitizers\nc-only'
 expect "C-only group is not planned in the full tier" "$(gate "$tmp/fixture" GATE_LIST_GROUPS=1 GATE_TIER=full)" \
-  $'core\ncases\njava\nbgen\nsanitizers'
+  $'core\ncases\njava-jar\njava-source\ntrace\nbgen\nsanitizers'
 expect "C-only group runs in the C tier" "$(gate "$tmp/fixture" GATE_TIER=c GATE_GROUP=c-only GATE_LIST=1)" \
   $'setup fixtures\nsetup c-build\nc-only fuzz-regressions'
 expect "C-only group is a full-tier no-op" "$(gate "$tmp/fixture" GATE_TIER=full GATE_GROUP=c-only GATE_LIST=1)" \
