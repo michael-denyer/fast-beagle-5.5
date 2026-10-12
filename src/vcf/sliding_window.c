@@ -87,8 +87,8 @@ struct sliding_window {
     ref_gt_rec *ref_peek;    /* a record read by a hasNext() check */
     gt_rec *next_targ;
     ref_gt_rec *next_ref;
-    targ_list targ_recs, targ_overlap;
-    ref_list ref_recs, ref_overlap;
+    targ_list targ_overlap;
+    ref_list ref_overlap;
     int window_index;
     int64_t n_read;          /* records taken from both iterators */
     int64_t cum_targ_markers, cum_markers;
