@@ -6,8 +6,10 @@
 # tests/check_bgen_phased.py finds consistent with the VCF and that plink2
 # --bgen ref-first loads. In both modes tests/check_bgen_info.py must find the
 # .info sidecar matching the BGEN and VCF, tests/check_bgen_reader.py must find
-# that bgen-reader decodes the BGEN as our own decoder does, and a run that
-# fails anywhere after the writer opens must leave no .bgen, .info or .sample.
+# that bgen-reader decodes every BGEN as our own decoder does (one process over
+# every file after the runs, since importing bgen-reader costs more than a
+# check), and a run that fails anywhere after the writer opens must leave no
+# .bgen, .info or .sample.
 # The VCF must keep its oracle hash. Invalid
 # bgen-bits and bgen-chr-set values must exit 1 with a message, as must every
 # refused run.
@@ -99,7 +101,9 @@ OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 fail=0
 pass() { echo "PASS $*"; }
-bgen_reader() { PYTHONDONTWRITEBYTECODE=1 uv run --python 3.12 --script "$ROOT/tests/check_bgen_reader.py" "$1" 2>&1; }
+bgen_reader() { PYTHONDONTWRITEBYTECODE=1 uv run --python 3.12 --script "$ROOT/tests/check_bgen_reader.py" "$@" 2>&1; }
+# The BGENs that passed every other live check, for one bgen_reader call.
+READER_FILES=()
 failed() { echo "FAIL $*"; fail=1; }
 
 # Sets expect, tags and args to the case's row.
@@ -161,14 +165,14 @@ live_phased() {  # out beagle-args...
 
 # A run that must succeed. Live checks run only under BGEN_ORACLE=live.
 check_ok() {  # label out mode key beagle-args...
-  local label=$1 b=$2 mode=$3 key=$4 rows decoded detail=; shift 4
+  local label=$1 b=$2 mode=$3 key=$4 rows detail=; shift 4
   case_verdict "$expect" "$args" "$b" $THREADS "$BEAGLE" bgen="$mode" "$@" \
     || { failed "$label beagle $VERDICT $(tail -1 "$b.run.log")"; return; }
   if [ "$ORACLE" = live ]; then
     detail=$("live_$mode" "$b" "$@") || { failed "$label $detail"; return; }
     rows=$(python3 "$ROOT/tests/check_bgen_info.py" "$b.bgen" "$b.info" "$b.vcf.gz") || { failed "$label .info: $rows"; return; }
-    decoded=$(bgen_reader "$b.bgen") || { failed "$label bgen-reader: $decoded"; return; }
-    detail="$detail, .info $rows, bgen-reader agrees, "
+    READER_FILES+=("$b.bgen")
+    detail="$detail, .info $rows, "
   fi
   check_hashes "$b" "$key" || { failed "$label $VERDICT"; return; }
   pass "$label ${detail}hashes as recorded"
@@ -258,6 +262,13 @@ while IFS='|' read -r run outcome; do
   # shellcheck disable=SC2086  # extra is an argument list; splitting it is the point
   selected "$name" && check_run "$name" "$mode" "$outcome" $extra
 done < <(all_runs)
+if [ ${#READER_FILES[@]} -gt 0 ]; then
+  if decoded=$(bgen_reader "${READER_FILES[@]}"); then
+    pass "bgen-reader decodes all ${#READER_FILES[@]} BGENs as our decoder does"
+  else
+    failed "bgen-reader: $(tail -1 <<< "$decoded")"
+  fi
+fi
 [ -n "${CASES:-}" ] || for a in "${BAD_ARGS[@]}"; do check_bad_args "$a"; done
 [ -n "${CASES:-}" ] || partial_runs
 if [ -n "${RECORD:-}" ] && [ "$fail" -eq 0 ]; then
