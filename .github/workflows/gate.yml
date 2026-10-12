@@ -75,8 +75,11 @@ jobs:
   # One job per runner and check group of tests/gate-steps.sh; the setup
   # checks (the fixtures and the C build) run in every job. The cases check
   # tests shell logic that behaves the same on both runners but takes minutes
-  # longer on macOS, so it runs on Linux only. ThreadSanitizer runs on macOS
-  # only (see tests/check-tsan.sh).
+  # longer on macOS, so it runs on Linux only. The java-jar and java-source
+  # groups run Java alone against recorded hashes that do not depend on the
+  # runner, so they run on Linux only too, which keeps the macOS jobs within
+  # the five that run at once. ThreadSanitizer runs on macOS only (see
+  # tests/check-tsan.sh).
   check:
     name: check (${{ matrix.runner }}, ${{ matrix.group }})
     needs: plan
@@ -90,6 +93,10 @@ jobs:
         exclude:
           - runner: macos-latest
             group: cases
+          - runner: macos-latest
+            group: java-jar
+          - runner: macos-latest
+            group: java-source
           - runner: ubuntu-latest
             group: tsan
     runs-on: ${{ matrix.runner }}
