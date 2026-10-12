@@ -14,6 +14,7 @@
 
 #include <stdbool.h>
 
+#include "blbutil/sample_file_it.h"
 #include "main/par.h"
 #include "vcf/genetic_map.h"
 #include "vcf/gt_rec.h"
@@ -45,6 +46,11 @@ typedef int (*phased_allele_fn)(const void *ctx, int m, int hap);
 typedef struct sliding_window sliding_window;
 
 sliding_window *sliding_window_open(const par *p);
+/* fast-beagle only: the windows of open record sources, so a test can cut
+ * windows from in-memory records. targ returns gt_rec records; ref returns
+ * ref_gt_rec records, or has NULL ops without a reference. Takes ownership of
+ * both and of gm. p gives the window parameters. */
+sliding_window *sliding_window_open_its(const par *p, sample_file_it targ, sample_file_it ref, genetic_map *gm);
 const samples *sliding_window_targ_samples(const sliding_window *sw);
 /* The reference samples after excludesamples=, 0 without a reference. */
 int sliding_window_n_ref_samples(const sliding_window *sw);

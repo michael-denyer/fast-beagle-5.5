@@ -107,6 +107,7 @@ step core oom make check-oom
 step core interval make check-interval
 step core markers make check-markers
 step core block-reader make check-block-reader
+step core sliding-window make check-sliding-window
 step core snv-perms make check-snv-perms
 step full java oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.27Feb25.75f.jar
 step full java failures-jar tests/check-failures.sh java -ea -jar data/beagle.27Feb25.75f.jar

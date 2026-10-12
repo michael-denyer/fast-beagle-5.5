@@ -128,19 +128,12 @@ static bool ref_has_next(sliding_window *sw) {
     return sw->ref_peek != NULL;
 }
 
-sliding_window *sliding_window_open(const par *p) {
-    if (p->ped != NULL) util_exit(PROGRAM ": the ped= parameter is not supported");
+static sliding_window *sliding_window_new(const par *p, sample_file_it targ, sample_file_it ref, genetic_map *gm) {
     sliding_window *sw = util_malloc(sizeof *sw);
     *sw = (sliding_window){0};
-    const chrom_interval *interval = p->has_chrom_int ? &p->chrom_int : NULL;
-    sw->exclude_samples = filter_id_set(p->excludesamples);
-    sw->exclude_markers = filter_id_set(p->excludemarkers);
-    sw->targ_it = interval_it_open(vcf_it_open(p->gt, sw->exclude_samples, sw->exclude_markers, p->nthreads), interval);
-    if (p->ref != NULL) {
-        sw->ref_it = interval_it_open(ref_file_it_open(p->ref, sw->exclude_samples, sw->exclude_markers, p->nthreads),
-                interval);
-    }
-    sw->gen_map = genetic_map_open(p->map, interval);
+    sw->targ_it = targ;
+    sw->ref_it = ref;
+    sw->gen_map = gm;
     sw->window_cm = p->window;
     sw->window_markers = p->window_markers;
     sw->overlap_cm = p->overlap;
@@ -148,7 +141,33 @@ sliding_window *sliding_window_open(const par *p) {
     sw->impute = p->impute;
     pthread_mutex_init(&sw->mutex, NULL);
     pthread_cond_init(&sw->changed, NULL);
+    return sw;
+}
+
+static void start_reader(sliding_window *sw) {
     if (pthread_create(&sw->reader, NULL, read_ahead, sw) != 0) util_exit(PROGRAM ": cannot create thread");
+}
+
+sliding_window *sliding_window_open_its(const par *p, sample_file_it targ, sample_file_it ref, genetic_map *gm) {
+    sliding_window *sw = sliding_window_new(p, targ, ref, gm);
+    start_reader(sw);
+    return sw;
+}
+
+sliding_window *sliding_window_open(const par *p) {
+    if (p->ped != NULL) util_exit(PROGRAM ": the ped= parameter is not supported");
+    const chrom_interval *interval = p->has_chrom_int ? &p->chrom_int : NULL;
+    str_set *exclude_samples = filter_id_set(p->excludesamples);
+    str_set *exclude_markers = filter_id_set(p->excludemarkers);
+    sample_file_it targ = interval_it_open(vcf_it_open(p->gt, exclude_samples, exclude_markers, p->nthreads), interval);
+    sample_file_it ref = {0};
+    if (p->ref != NULL) {
+        ref = interval_it_open(ref_file_it_open(p->ref, exclude_samples, exclude_markers, p->nthreads), interval);
+    }
+    sliding_window *sw = sliding_window_new(p, targ, ref, genetic_map_open(p->map, interval));
+    sw->exclude_samples = exclude_samples;
+    sw->exclude_markers = exclude_markers;
+    start_reader(sw);
     return sw;
 }
 
