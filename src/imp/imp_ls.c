@@ -186,7 +186,8 @@ static void set_fwd_values(imp_ls_baum *b, int n_haps) {
     for (int m = 1; m < id->n_clusters; ++m) {
         em[0] = 1.0f - id->err_prob[m];
         em[1] = id->err_prob[m];
-        sum = hmm_fwd_update(b->fwd_val[m - 1], b->fwd_val[m], sum, id->p_recomb[m], em, b->mismatch[m], n_haps);
+        hmm_lane lane = {b->fwd_val[m - 1], b->fwd_val[m], b->mismatch[m], em, &sum, id->p_recomb[m], n_haps};
+        hmm_fwd_lanes(&lane, 1);
     }
 }
 

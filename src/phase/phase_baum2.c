@@ -143,14 +143,16 @@ static void bwd_begin(bwd_pass *bp, phase_baum2 *pb, const marker_cluster *mc) {
     bp->c = last_cluster - 1;
 }
 
-/* The update that takes the backward values from cluster c + 1 to cluster c. */
-static hmm3_step bwd_step(bwd_pass *bp) {
+/* The update that takes the backward values from cluster c + 1 to cluster c,
+ * as lanes[0, 3). */
+static void bwd_step(bwd_pass *bp, hmm_lane *lanes) {
     phase_baum2 *pb = bp->pb;
     const marker_cluster *mc = bp->mc;
     int c_p1 = bp->c + 1;
     set_cluster_em_probs(pb, mc->ends[c_p1] - marker_cluster_start(mc, c_p1));
-    return (hmm3_step){pb->bwd, NULL, mc->p_recomb[c_p1], pb->em_probs,
-            {pb->mismatch[0][c_p1], pb->mismatch[1][c_p1], pb->mismatch[2][c_p1]}, pb->n_states};
+    for (int i = 0; i < 3; ++i) {
+        lanes[i] = (hmm_lane){NULL, pb->bwd[i], pb->mismatch[i][c_p1], pb->em_probs, NULL, mc->p_recomb[c_p1], pb->n_states};
+    }
 }
 
 static void bwd_end_step(bwd_pass *bp) {
@@ -173,8 +175,9 @@ static void bwd_end_step(bwd_pass *bp) {
 
 static void bwd_finish(bwd_pass *bp) {
     while (bp->c >= 0) {
-        hmm3_step s = bwd_step(bp);
-        hmm_bwd_update3(s.val, s.p_switch, s.p_mismatch, s.m[0], s.m[1], s.m[2], s.n_states);
+        hmm_lane lanes[3];
+        bwd_step(bp, lanes);
+        hmm_bwd_lanes(lanes, 3);
         bwd_end_step(bp);
     }
 }
@@ -283,8 +286,8 @@ static void fwd_begin(fwd_pass *fp, phase_baum2 *pb, const marker_cluster *mc) {
 }
 
 /* Phases cluster c if it is an unphased heterozygote, then gives the update
- * that takes the forward values to cluster c. */
-static hmm3_step fwd_step(fwd_pass *fp) {
+ * that takes the forward values to cluster c, as lanes[0, 3). */
+static void fwd_step(fwd_pass *fp, hmm_lane *lanes) {
     phase_baum2 *pb = fp->pb;
     const marker_cluster *mc = fp->mc;
     int c = fp->c;
@@ -300,8 +303,9 @@ static hmm3_step fwd_step(fwd_pass *fp) {
         pb->fwd_sums[1] = pb->fwd_sums[2] = pb->fwd_sums[0];
     }
     set_cluster_em_probs(pb, mc->ends[c] - marker_cluster_start(mc, c));
-    return (hmm3_step){pb->fwd, pb->fwd_sums, mc->p_recomb[c], pb->em_probs,
-            {pb->mismatch[0][c], pb->mismatch[1][c], pb->mismatch[2][c]}, pb->n_states};
+    for (int i = 0; i < 3; ++i) {
+        lanes[i] = (hmm_lane){pb->fwd[i], pb->fwd[i], pb->mismatch[i][c], pb->em_probs, &pb->fwd_sums[i], mc->p_recomb[c], pb->n_states};
+    }
 }
 
 static void fwd_end_step(fwd_pass *fp) {
@@ -311,8 +315,9 @@ static void fwd_end_step(fwd_pass *fp) {
 
 static void fwd_finish(fwd_pass *fp) {
     while (fp->c < fp->mc->n_clusters) {
-        hmm3_step s = fwd_step(fp);
-        hmm_fwd_update3(s.val, s.sums, s.p_switch, s.p_mismatch, s.m[0], s.m[1], s.m[2], s.n_states);
+        hmm_lane lanes[3];
+        fwd_step(fp, lanes);
+        hmm_fwd_lanes(lanes, 3);
         fwd_end_step(fp);
     }
 }
@@ -350,8 +355,10 @@ void phase_baum2_phase_pair(phase_baum2 *pb0, int sample0, phase_baum2 *pb1, int
     if (run0) bwd_begin(&b0, pb0, &mc0);
     if (run1) bwd_begin(&b1, pb1, &mc1);
     while (run0 && run1 && b0.c >= 0 && b1.c >= 0) {
-        hmm3_step s0 = bwd_step(&b0), s1 = bwd_step(&b1);
-        hmm_bwd_update3x2(&s0, &s1);
+        hmm_lane lanes[6];
+        bwd_step(&b0, lanes);
+        bwd_step(&b1, lanes + 3);
+        hmm_bwd_lanes(lanes, 6);
         bwd_end_step(&b0);
         bwd_end_step(&b1);
     }
@@ -361,8 +368,10 @@ void phase_baum2_phase_pair(phase_baum2 *pb0, int sample0, phase_baum2 *pb1, int
     if (run0) fwd_begin(&f0, pb0, &mc0);
     if (run1) fwd_begin(&f1, pb1, &mc1);
     while (run0 && run1 && f0.c < mc0.n_clusters && f1.c < mc1.n_clusters) {
-        hmm3_step s0 = fwd_step(&f0), s1 = fwd_step(&f1);
-        hmm_fwd_update3x2(&s0, &s1);
+        hmm_lane lanes[6];
+        fwd_step(&f0, lanes);
+        fwd_step(&f1, lanes + 3);
+        hmm_fwd_lanes(lanes, 6);
         fwd_end_step(&f0);
         fwd_end_step(&f1);
     }

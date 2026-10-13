@@ -152,7 +152,6 @@ static void get_param_data(hmm_param_data *hpd, int n_states) {
     int n = hpd->n_markers;
     const float *p_recomb = hpd->pd->p_recomb;
     uint8_t **al_match0 = hpd->al_match[0], **al_match1 = hpd->al_match[1];
-    const int n_states2[2] = {n_states, n_states};
     size_t row = (size_t)hpd->max_states;
     size_t row_bytes = (size_t)n_states * sizeof *hpd->bwd[0];
     for (int i = 0; i < 2; ++i) {
@@ -160,8 +159,9 @@ static void get_param_data(hmm_param_data *hpd, int n_states) {
     }
     for (int m = n - 1; m >= 0; --m) {
         if (m < n - 1) {
-            const uint8_t *al_match[2] = {al_match0[m + 1], al_match1[m + 1]};
-            hmm_bwd_update2(hpd->bwd, p_recomb[m + 1], hpd->em_probs, al_match, n_states2);
+            hmm_lane lanes[2] = {{NULL, hpd->bwd[0], al_match0[m + 1], hpd->em_probs, NULL, p_recomb[m + 1], n_states},
+                    {NULL, hpd->bwd[1], al_match1[m + 1], hpd->em_probs, NULL, p_recomb[m + 1], n_states}};
+            hmm_bwd_lanes(lanes, 2);
         }
         if (m == n - 1 || (m + 1) % BWD_BLOCK == 0) {
             for (int i = 0; i < 2; ++i) memcpy(hpd->block_end_bwd[i] + (size_t)(m / BWD_BLOCK) * row, hpd->bwd[i], row_bytes);
@@ -181,8 +181,9 @@ static void get_param_data(hmm_param_data *hpd, int n_states) {
             float *bwd_m[2] = {hpd->block_bwd[0] + (size_t)(m - start) * row, hpd->block_bwd[1] + (size_t)(m - start) * row};
             memcpy(bwd_m[0], bwd_m[0] + row, row_bytes);
             memcpy(bwd_m[1], bwd_m[1] + row, row_bytes);
-            const uint8_t *al_match[2] = {al_match0[m + 1], al_match1[m + 1]};
-            hmm_bwd_update2(bwd_m, p_recomb[m + 1], hpd->em_probs, al_match, n_states2);
+            hmm_lane lanes[2] = {{NULL, bwd_m[0], al_match0[m + 1], hpd->em_probs, NULL, p_recomb[m + 1], n_states},
+                    {NULL, bwd_m[1], al_match1[m + 1], hpd->em_probs, NULL, p_recomb[m + 1], n_states}};
+            hmm_bwd_lanes(lanes, 2);
         }
         for (int m = start; m < end; ++m) {
             float *bwd_m[2] = {hpd->block_bwd[0] + (size_t)(m - start) * row, hpd->block_bwd[1] + (size_t)(m - start) * row};
