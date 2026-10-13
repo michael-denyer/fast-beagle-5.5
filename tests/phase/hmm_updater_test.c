@@ -107,6 +107,8 @@ int main(void) {
         hmm_lane lanes[N_LANES];
         for (int l = 0; l < k; ++l) {
             out[l] = base[l];
+            /* A step that read val instead of prev would see these. */
+            for (int s = 0; s < n_states[l]; ++s) out[l].val[s] = NAN;
             lanes[l] = (hmm_lane){out[l].prev, out[l].val, out[l].mismatch, out[l].p_mismatch, &out[l].sum, out[l].p_switch,
                     n_states[l]};
         }
