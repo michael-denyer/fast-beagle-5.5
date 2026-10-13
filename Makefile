@@ -26,7 +26,7 @@ JCOMPAT_FIXTURES := random math numbers utf8 parse parseint pqueue search
 LIBDEFLATE_OBJ := $(patsubst %.c,build/obj/%.o,$(wildcard third_party/libdeflate/lib/*.c third_party/libdeflate/lib/*/*.c))
 BEAGLE_OBJ := $(sort $(patsubst src/%.c,build/obj/%.o,$(wildcard src/*/*.c)) $(JCOMPAT_OBJ) $(LIBDEFLATE_OBJ))
 
-.PHONY: all install check-jcompat check-bgen-unit check-records check-bgen-files check-vcf-index check-tbi check-tracker check-oom check-interval check-markers check-block-reader check-sliding-window check-snv-perms check-piece-size java-trace clean
+.PHONY: all install check-jcompat check-bgen-unit check-records check-bgen-files check-vcf-index check-tbi check-tracker check-oom check-interval check-markers check-block-reader check-sliding-window check-hmm-updater check-snv-perms check-piece-size java-trace clean
 .SECONDARY:
 .DELETE_ON_ERROR:
 all: build/beagle
@@ -130,6 +130,13 @@ check-markers: build/vcf/markers_test
 	./build/vcf/markers_test
 
 build/vcf/markers_test: tests/vcf/markers_test.c $(filter-out build/obj/main/main.o,$(BEAGLE_OBJ))
+	@mkdir -p $(@D)
+	$(LINK)
+
+check-hmm-updater: build/phase/hmm_updater_test
+	./build/phase/hmm_updater_test
+
+build/phase/hmm_updater_test: tests/phase/hmm_updater_test.c build/obj/phase/hmm_updater.o
 	@mkdir -p $(@D)
 	$(LINK)
 

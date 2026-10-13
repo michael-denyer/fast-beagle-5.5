@@ -109,6 +109,7 @@ step core markers make check-markers
 step core block-reader make check-block-reader
 step core sliding-window make check-sliding-window
 step core snv-perms make check-snv-perms
+step core hmm-updater make check-hmm-updater
 step full java-jar oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.27Feb25.75f.jar
 step full java-jar failures-jar tests/check-failures.sh java -ea -jar data/beagle.27Feb25.75f.jar
 step full java-jar log-jar tests/check-log.sh java -ea -jar data/beagle.27Feb25.75f.jar

@@ -27,7 +27,7 @@ SAN_CFLAGS=${SAN_CFLAGS:-"-O1 -g -fno-omit-frame-pointer -fsanitize=address,unde
 SAN_CFLAGS="$SAN_CFLAGS -Wno-pass-failed"
 # make does not rebuild objects when only CFLAGS change.
 make -C "$SAN" clean > /dev/null
-make -C "$SAN" CFLAGS="$SAN_CFLAGS" build/beagle check-bgen-unit check-records check-tracker check-markers check-block-reader check-sliding-window build/output/bgen_files_fixture \
+make -C "$SAN" CFLAGS="$SAN_CFLAGS" build/beagle check-bgen-unit check-records check-tracker check-markers check-block-reader check-sliding-window check-hmm-updater build/output/bgen_files_fixture \
   > "$SAN/make.log" 2>&1 || { echo "FAIL sanitizer build or BGEN unit test ($SAN/make.log)"; exit 1; }
 echo "PASS sanitizer build and BGEN unit tests"
 
