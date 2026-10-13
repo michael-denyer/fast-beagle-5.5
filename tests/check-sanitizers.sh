@@ -86,12 +86,20 @@ export -f run case_verdict case_run vcf_hash want_hash thread_dependent
 export OUT SAN REPORT DATA SEED SHA
 runs > "$OUT/runs"
 # Each run's lines go to its own file, printed in table order once every run ends.
+# Each run also writes its exit status to a file, so a run that never started,
+# or whose shell died, has none.
 # shellcheck disable=SC2016  # the child bash expands the variables
 xargs -P "${SAN_JOBS:-$(getconf _NPROCESSORS_ONLN)}" -L1 \
-  bash -c 'run "$@" > "$OUT/$1.t$4.$5.lines" 2>&1 || touch "$OUT/$1.t$4.$5.fail"' _ < "$OUT/runs"
+  bash -c 'run "$@" > "$OUT/$1.t$4.$5.lines" 2>&1; echo $? > "$OUT/$1.t$4.$5.status"' _ < "$OUT/runs" \
+  || { echo "FAIL sanitizer runs: xargs exited $?"; fail=1; }
 while read -r name _ _ t mode _; do
-  cat "$OUT/$name.t$t.$mode.lines"
-  [ ! -e "$OUT/$name.t$t.$mode.fail" ] || fail=1
+  out="$OUT/$name.t$t.$mode"
+  [ ! -e "$out.lines" ] || cat "$out.lines"
+  if [ ! -e "$out.status" ]; then
+    echo "FAIL $name nthreads=$t $mode: the run did not finish"; fail=1
+  elif [ "$(cat "$out.status")" != 0 ]; then
+    fail=1
+  fi
 done < "$OUT/runs"
 
 [ $leaks -eq 1 ] && echo "leak checking on" || echo "leak checking off (not supported on $(uname -s) $(uname -m))"
