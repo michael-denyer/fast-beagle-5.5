@@ -91,7 +91,7 @@ Beagle's output depends on the exact behaviour of Java library code. `src/jcompa
 
 `tests/check-sanitizers.sh` builds fast-beagle and the unit tests with AddressSanitizer and UndefinedBehaviorSanitizer at `-O1`. It runs every oracle case at 1 and 2 threads, as VCF only, with `bgen=plink2` and with `bgen=phased`. Each run must exit 0 with the oracle hash and no sanitizer report. The `bgen=plink2` runs skip the 3 cases on non-autosomes. On Linux, LeakSanitizer also runs. On macOS, `tests/check-tsan.sh` builds fast-beagle with ThreadSanitizer and runs every oracle case at 18 threads, and the 2 thread-dependent cases again with tracing on.
 
-`tests/check-tla.sh` model-checks [tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla), the protocol of the pipelined imputed writer in `src/blbutil/parallel.c`. Workers build records in parallel, and the calling thread writes them in order. TLC checks 8 model sizes, from 1 worker and 3 items to 4 workers and 8 items, with windows of 1 to 5. It checks that items are consumed in order, that no slot is overwritten before it is consumed, that there is no deadlock, and that every run consumes every item. The model includes spurious wakeups, so a lost wakeup fails the check.
+`tests/check-tla.sh` model-checks [tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla), the protocol of `parallel_ordered` in `src/blbutil/parallel.c`, which the phased and the imputed writer print records through. Workers build records in parallel, and the calling thread writes them in order. TLC checks 8 model sizes, from 1 worker and 3 items to 4 workers and 8 items, with windows of 1 to 5. It checks that items are consumed in order, that no slot is overwritten before it is consumed, that there is no deadlock, and that every run consumes every item. The model includes spurious wakeups, so a lost wakeup fails the check.
 
 `make check-piece-size` builds a second binary that splits long imputation clusters into work items of one marker, not 500. It runs both binaries on the 20 oracle cases with `ref=` at 2 and 18 threads. Both must write the same VCF and the same trace seam T5d. The work-item size is a tuning value, and the check proves it does not change the output.
 
@@ -114,7 +114,7 @@ Floating-point results depend on the order of operations. fast-beagle keeps Java
 - Beagle calls `Math.log`, `Math.log10`, `Math.pow` and `Math.expm1`. fast-beagle calls the fdlibm 5.3 functions that define `StrictMath`, from `src/jcompat/fdlibm/`. At each Beagle call site the result is cast to `float` or floored, and the `math` fixture checks that `Math` and the fdlibm port then give the same value.
 - `src/jcompat/jrandom.c` reproduces `java.util.Random`. `src/jcompat/jnum.c` reproduces Java's narrowing casts, `Math.round`, number parsing and number formatting.
 - `nthreads=` sets both the thread count and the partitions that Beagle's output depends on, as in Beagle.
-- Threaded loops write results in a fixed order. The imputed writer builds records on worker threads and writes them in item order.
+- Threaded loops write results in a fixed order. The phased and the imputed writer build records on worker threads and write them in item order.
 
 ## Limits
 
