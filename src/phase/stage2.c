@@ -94,9 +94,10 @@ static void run_fwd(const hmm_state_probs *hp, const int *slot, float *const pro
     }
     for (int m = 1; m < hp->n_markers; ++m) {
         float *fwd[2] = {fwd_row(hp, 0, slot, probs[0], m), fwd_row(hp, 1, slot, probs[1], m)};
-        const uint8_t *mismatch[2] = {mismatch_row(hp, 0, m), mismatch_row(hp, 1, m)};
         hmm_lane lanes[2];
-        for (int i = 0; i < 2; ++i) lanes[i] = (hmm_lane){prev[i], fwd[i], mismatch[i], hp->p_mismatch, &sum[i], p_recomb[m], n_states[i]};
+        for (int i = 0; i < 2; ++i) {
+            lanes[i] = (hmm_lane){prev[i], fwd[i], mismatch_row(hp, i, m), hp->p_mismatch, &sum[i], p_recomb[m], n_states[i]};
+        }
         hmm_fwd_lanes(lanes, 2);
         prev[0] = fwd[0];
         prev[1] = fwd[1];

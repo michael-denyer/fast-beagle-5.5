@@ -56,9 +56,9 @@ void hmm_fwd_lanes(const hmm_lane *lanes, int k) {
         const hmm_lane *ln = &lanes[l];
         const uint8_t *restrict d = ln->mismatch;
         float match = ln->p_mismatch[0], differ = ln->p_mismatch[1];
-        float shift = ln->p_switch / ln->n_states;
-        float scale = (1.0f - ln->p_switch) / *ln->sum;
         int n_states = ln->n_states;
+        float shift = ln->p_switch / n_states;
+        float scale = (1.0f - ln->p_switch) / *ln->sum;
         if (ln->prev == ln->val) {
             float *restrict f = ln->val;
             #pragma omp simd
@@ -88,9 +88,9 @@ void hmm_bwd_lanes(const hmm_lane *lanes, int k) {
     sum_lanes(lanes, k, sums);
     for (int l = 0; l < k; ++l) {
         float *restrict b = lanes[l].val;
-        float shift = lanes[l].p_switch / lanes[l].n_states;
-        float scale = (1.0f - lanes[l].p_switch) / sums[l];
         int n_states = lanes[l].n_states;
+        float shift = lanes[l].p_switch / n_states;
+        float scale = (1.0f - lanes[l].p_switch) / sums[l];
         #pragma omp simd
         for (int s = 0; s < n_states; ++s) b[s] = scale * b[s] + shift;
     }
