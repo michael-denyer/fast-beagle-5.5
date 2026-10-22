@@ -96,12 +96,12 @@ jobs:
             release/conda/recipe.yaml > recipe/recipe.yaml
           grep -x "  version: \"$VERSION\"" recipe/recipe.yaml
           grep -x "  sha256: $sha" recipe/recipe.yaml
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: release-source
           path: dist
           if-no-files-found: error
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: conda-recipe
           path: recipe
@@ -196,7 +196,7 @@ jobs:
           cd "fast-beagle-$VERSION"
           tests/check-oracle.sh "$RUNNER_TEMP/env/bin/fast-beagle" | tee "$RUNNER_TEMP/oracle.log"
           echo "conda $PLATFORM: $(grep -c '^PASS' "$RUNNER_TEMP/oracle.log") oracle runs passed" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: conda-${{ matrix.platform }}
           path: conda-out/${{ matrix.platform }}/*.conda
@@ -265,7 +265,7 @@ jobs:
           cd "fast-beagle-$VERSION"
           tests/check-oracle.sh "$GITHUB_WORKSPACE/unpacked/$PACKAGE/fast-beagle" | tee "$RUNNER_TEMP/oracle.log"
           echo "binary $PACKAGE: $(grep -c '^PASS' "$RUNNER_TEMP/oracle.log") oracle runs passed" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: release-binary-${{ matrix.name }}
           path: fast-beagle-${{ env.VERSION }}/dist/${{ env.PACKAGE }}.tar.gz
@@ -336,7 +336,7 @@ jobs:
           /usr/local/bin/fast-beagle gt=small.vcf out="$RUNNER_TEMP/small" nthreads=2
           test "$(bgzip -dc "$RUNNER_TEMP/small.vcf.gz" | grep -vc '^#')" = 40
           echo "$PACKAGE.pkg: signed, notarised, installed and run" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: release-pkg-macos-arm64
           path: pkg/${{ env.PACKAGE }}.pkg
