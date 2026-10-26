@@ -177,7 +177,7 @@ jobs:
             --channel "file://$PWD/conda-out" --channel conda-forge --channel bioconda "fast-beagle=$VERSION"
           micromamba list --prefix "$RUNNER_TEMP/env" '^(fast-beagle|htslib)$'
           if [ "$RUNNER_OS" = Linux ]; then ldd "$RUNNER_TEMP/env/bin/fast-beagle"; else otool -L "$RUNNER_TEMP/env/bin/fast-beagle"; fi
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
@@ -246,7 +246,7 @@ jobs:
           tar -xzf "dist/fast-beagle-$VERSION.tar.gz"
           cd "fast-beagle-$VERSION"
           release/build-static.sh "$VERSION"
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
