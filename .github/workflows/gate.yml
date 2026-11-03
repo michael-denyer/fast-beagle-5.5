@@ -169,30 +169,22 @@ jobs:
   # 100 kb cases, on the nightly and manual runs only (tests/check-chr20.sh).
   # It is not one of the gate job's needs, so it never blocks a pull request.
   # A failure fails the run, so the next nightly run reruns the whole full
-  # tier, not only this job. Its macOS job is a sixth macOS job on these runs
-  # and waits for a check job to finish.
+  # tier, not only this job. It runs on Linux only: the oracle cases already
+  # check both platforms, and macOS runners are the scarcer ones.
   chr20:
     needs: plan
     if: needs.plan.outputs.run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Install htslib (Linux)
-        if: runner.os == 'Linux'
+      - name: Install htslib
         run: |
           if [ ! -e /usr/include/htslib/hts.h ] || ! command -v tabix > /dev/null; then
             sudo apt-get update && sudo apt-get install -y libhts-dev tabix
           fi
-      - name: Install htslib (macOS)
-        if: runner.os == 'macOS'
-        run: brew list htslib > /dev/null 2>&1 || brew install htslib
       # Only the derived inputs, about 330 MB; the 690 MB panel is not kept.
       # The save is its own step, so a failing check still keeps the inputs
       # (actions/cache saves only when every step passed).

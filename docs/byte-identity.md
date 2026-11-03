@@ -23,7 +23,7 @@ Each check below runs in the pre-merge gate, `tests/gate-steps.sh`, except the c
 | [Java library fixtures](#java-library-fixtures) | C reproductions of the Java library behaviour that Beagle depends on, against a real JVM | 8 fixture sets | `make check-jcompat` |
 | [Thread safety and ordering](#thread-safety-and-ordering) | Memory errors, undefined behaviour and data races on the oracle cases, the ordered writer protocol, and the imputation work-item size | Sanitizers on 35 cases, TLC on 8 model sizes, piece size on 20 cases at 2 and 18 threads | `tests/check-sanitizers.sh`, `tests/check-tsan.sh`, `tests/check-tla.sh`, `make check-piece-size` |
 | [Platforms](#platforms) | The whole gate on two operating systems and two CPU architectures | macOS arm64 and Linux x86_64 | `tests/check-local.sh` |
-| [chr20 benchmark](#chr20-benchmark) | A whole-chromosome imputation run, nightly in CI and outside the pre-merge gate | 1000 Genomes chr20, 6 runs per tool at 18 threads, and fast-beagle on each nightly run on 2 runners | `tests/check-chr20.sh <dir>`, `tests/bench/bench.sh <dir> 3` |
+| [chr20 benchmark](#chr20-benchmark) | A whole-chromosome imputation run, nightly in CI and outside the pre-merge gate | 1000 Genomes chr20, 6 runs per tool at 18 threads, and fast-beagle on each nightly run on Linux x86_64 | `tests/check-chr20.sh <dir>`, `tests/bench/bench.sh <dir> 3` |
 
 ### Oracle hashes
 
@@ -105,7 +105,7 @@ The release workflow runs `tests/check-oracle.sh` on the binaries that users ins
 
 `tests/bench/bench.sh` runs the jar and fast-beagle on a 1000 Genomes chr20 imputation. The target has 321 samples at 15,879 markers, and the reference has 2,881 samples at 1,642,181 markers. The script records the output hash as `tests/check-oracle.sh` computes it. In the recorded run, all 6 Java runs and all 6 fast-beagle runs at 18 threads wrote hash `38d4ed96cec67a44`. [perf-baseline.md](perf-baseline.md) has the method, the machine and the timings.
 
-`tests/check-chr20.sh <dir>` runs fast-beagle alone on the same input at 18 threads and requires hash `38d4ed96cec67a44`. The `chr20` job in `.github/workflows/gate.yml` runs it on `macos-latest` and `ubuntu-latest` in the nightly and manual CI runs. The required `gate` job does not wait for it, so it never blocks a pull request.
+`tests/check-chr20.sh <dir>` runs fast-beagle alone on the same input at 18 threads and requires hash `38d4ed96cec67a44`. The `chr20` job in `.github/workflows/gate.yml` runs it on `ubuntu-latest` in the nightly and manual CI runs. The required `gate` job does not wait for it, so it never blocks a pull request.
 
 ## Why identical output is possible
 
