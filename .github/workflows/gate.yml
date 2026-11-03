@@ -165,6 +165,56 @@ jobs:
           path: build/fuzz-fail
           if-no-files-found: ignore
 
+  # The 1000 Genomes chr20 imputation, a whole chromosome against the gate's
+  # 100 kb cases, on the nightly and manual runs only (tests/check-chr20.sh).
+  # It is not one of the gate job's needs, so it never blocks a pull request.
+  # A failure fails the run, so the next nightly run reruns the whole full
+  # tier, not only this job. Its macOS job is a sixth macOS job on these runs
+  # and waits for a check job to finish.
+  chr20:
+    needs: plan
+    if: needs.plan.outputs.run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install htslib (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if [ ! -e /usr/include/htslib/hts.h ] || ! command -v tabix > /dev/null; then
+            sudo apt-get update && sudo apt-get install -y libhts-dev tabix
+          fi
+      - name: Install htslib (macOS)
+        if: runner.os == 'macOS'
+        run: brew list htslib > /dev/null 2>&1 || brew install htslib
+      # Only the derived inputs, about 330 MB; the 690 MB panel is not kept.
+      # The save is its own step, so a failing check still keeps the inputs
+      # (actions/cache saves only when every step passed).
+      - id: chr20-data
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/chr20
+          key: chr20-${{ hashFiles('tests/bench/fetch-chr20.sh', 'tests/bench/make_chr20.py') }}
+      - name: Fetch the chr20 inputs
+        if: steps.chr20-data.outputs.cache-hit != 'true'
+        run: |
+          tests/bench/fetch-chr20.sh "$RUNNER_TEMP/chr20-src"
+          mkdir -p "$RUNNER_TEMP/chr20"
+          mv "$RUNNER_TEMP/chr20-src/ref.vcf.gz" "$RUNNER_TEMP/chr20-src/target.vcf.gz" "$RUNNER_TEMP/chr20-src/chr20.map" "$RUNNER_TEMP/chr20/"
+      - if: steps.chr20-data.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/chr20
+          key: ${{ steps.chr20-data.outputs.cache-primary-key }}
+      - run: make build/beagle
+      - run: tests/check-chr20.sh "$RUNNER_TEMP/chr20"
+
   gate:
     needs: [plan, check]
     if: always()
