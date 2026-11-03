@@ -169,49 +169,37 @@ jobs:
   # 100 kb cases, on the nightly and manual runs only (tests/check-chr20.sh).
   # It is not one of the gate job's needs, so it never blocks a pull request.
   # A failure fails the run, so the next nightly run reruns the whole full
-  # tier, not only this job. Its macOS job is a sixth macOS job on these runs
-  # and waits for a check job to finish.
+  # tier, not only this job. It runs on Linux only: the oracle cases already
+  # check both platforms, and macOS runners are the scarcer ones.
   chr20:
     needs: plan
     if: needs.plan.outputs.run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Install htslib (Linux)
-        if: runner.os == 'Linux'
+      - name: Install htslib
         run: |
           if [ ! -e /usr/include/htslib/hts.h ] || ! command -v tabix > /dev/null; then
             sudo apt-get update && sudo apt-get install -y libhts-dev tabix
           fi
-      - name: Install htslib (macOS)
-        if: runner.os == 'macOS'
-        run: brew list htslib > /dev/null 2>&1 || brew install htslib
-      # Only the derived inputs, about 330 MB; the 690 MB panel is not kept.
-      # The save is its own step, so a failing check still keeps the inputs
-      # (actions/cache saves only when every step passed).
-      - id: chr20-data
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ${{ runner.temp }}/chr20
-          key: chr20-${{ hashFiles('tests/bench/fetch-chr20.sh', 'tests/bench/make_chr20.py') }}
-      - name: Fetch the chr20 inputs
-        if: steps.chr20-data.outputs.cache-hit != 'true'
+      # The files that tests/bench/fetch-chr20.sh derives, from this repo's
+      # chr20-inputs-1 release: downloads from EBI to GitHub runners ran at
+      # about 80 KB/s.
+      - name: Download the chr20 inputs
         run: |
-          tests/bench/fetch-chr20.sh "$RUNNER_TEMP/chr20-src"
           mkdir -p "$RUNNER_TEMP/chr20"
-          mv "$RUNNER_TEMP/chr20-src/ref.vcf.gz" "$RUNNER_TEMP/chr20-src/target.vcf.gz" "$RUNNER_TEMP/chr20-src/chr20.map" "$RUNNER_TEMP/chr20/"
-      - if: steps.chr20-data.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ${{ runner.temp }}/chr20
-          key: ${{ steps.chr20-data.outputs.cache-primary-key }}
+          cd "$RUNNER_TEMP/chr20"
+          for f in ref.vcf.gz target.vcf.gz chr20.map; do
+            curl -fSL -o "$f" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/chr20-inputs-1/$f"
+          done
+          sha256sum -c - <<'EOF'
+          37486ff2a7466ea1f7181048e8a133493f62406394b6fce913daaf669e303cb3  ref.vcf.gz
+          d6c64ca29b5429e93881a3f85ef735b65996329364bf389554cbbe3dfc1d957a  target.vcf.gz
+          8ed4770abb0a6cfbc4e30e3be7b1606f33b05eb64109fcb3400deb3816aa4077  chr20.map
+          EOF
       - run: make build/beagle
       - run: tests/check-chr20.sh "$RUNNER_TEMP/chr20"
 
