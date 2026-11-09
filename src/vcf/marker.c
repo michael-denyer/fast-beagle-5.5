@@ -79,19 +79,25 @@ static void init_snv_perms(void) {
     qsort(snv_perms, N_SNV_PERMS, sizeof snv_perms[0], compare_str);
 }
 
+/* String.compareTo of a table row with the len bytes at s. s is a Java String,
+ * so it can hold NUL bytes and has no terminator. */
+static int compare_perm(const char *perm, const char *s, size_t len) {
+    size_t perm_len = strlen(perm);
+    int c = memcmp(perm, s, perm_len < len ? perm_len : len);
+    return c != 0 ? c : (perm_len > len) - (perm_len < len);
+}
+
 /* MarkerParser.snvIndex: Arrays.binarySearch gives the match or the insertion
  * point, which for distinct sorted entries is the first entry >= s. */
 static int snv_index(const char *s, size_t len) {
     int lo = 0, hi = N_SNV_PERMS;
     while (lo < hi) {
         int mid = (lo + hi) >> 1;
-        int c = strncmp(snv_perms[mid], s, len);
-        if (c == 0 && snv_perms[mid][len] != '\0') c = 1;  /* longer entry sorts after s */
-        if (c < 0) lo = mid + 1;
+        if (compare_perm(snv_perms[mid], s, len) < 0) lo = mid + 1;
         else hi = mid;
     }
     if (lo == N_SNV_PERMS) return -1;
-    return strncmp(snv_perms[lo], s, len) == 0 ? lo : -1;
+    return strlen(snv_perms[lo]) >= len && memcmp(snv_perms[lo], s, len) == 0 ? lo : -1;
 }
 
 static int truncate80(size_t len) {
