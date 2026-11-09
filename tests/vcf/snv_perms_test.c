@@ -26,6 +26,17 @@ int main(void) {
     assert(strcmp(snv_perms[0], "A\t*,C,G,T") == 0);
     assert(strcmp(snv_perms[N_SNV_PERMS - 1], "T\tG,C,A,*") == 0);
     assert(h == SNV_PERMS_FNV);
+
+    /* MarkerParser.snvIndex: a REF and ALT that is a prefix of a row gives that
+     * row. The text is a Java String, so a NUL byte is a character like any
+     * other and a row never matches text that continues after the row ends. */
+    int a_c = snv_index("A\tC", 3);
+    assert(a_c >= 0 && strncmp(snv_perms[a_c], "A\tC,", 4) == 0);
+    int a_dot = snv_index("A\t.", 3);
+    assert(a_dot >= 0 && strcmp(snv_perms[a_dot], "A\t.") == 0);
+    assert(snv_index("A\tN", 3) == -1);
+    assert(snv_index("A\t.\0XX", 6) == -1);
+    assert(snv_index("A\t*,C,G,T\0X", 11) == -1);
     printf("snv_perms: %d rows match\n", N_SNV_PERMS);
     return 0;
 }
