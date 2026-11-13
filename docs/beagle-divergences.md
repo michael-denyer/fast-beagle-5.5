@@ -88,3 +88,5 @@ The JVM's maximum heap caps Beagle's memory. Without `-Xmx`, the JVM sets the ca
 fast-beagle opens `gt=` and `ref=` files with Beagle's rules. The rules cover gzip and BGZF detection, bref3 references and the reference file-name extensions. A bref3 reference can give different imputed values than a VCF of the same panel in both tools. See [Reference panels in bref3 format](usage.md#reference-panels-in-bref3-format).
 
 fast-beagle has no bref3 writer. To convert a VCF reference to bref3, use Beagle's `bref3.27Feb25.75f.jar`.
+
+Beagle stops reading a BGZF file at a run of empty BGZF blocks and drops the rest of the file without an error. Its `BGZipIt` inflates blocks in batches of 4 × `nthreads`, and a batch in which every block is empty ends the input. fast-beagle reads the whole file, as htslib does. A file made by `bgzip` or by concatenating `.vcf.gz` files has at most one empty block between members, which neither tool stops at. A file whose middle holds 8 empty blocks gives this difference at `nthreads=1`: Beagle writes the records before the run, and fast-beagle writes all of them. `make check-line-reader` tests that fast-beagle reads past such a run.
