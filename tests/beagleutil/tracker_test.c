@@ -54,6 +54,24 @@ int main(void) {
     comp_hap_tracker_free(&t);
     puts("PASS disabled staleness, clear, distinct and repeated fallback draws");
 
+    /* An offered key equal to its parent's stays below it. */
+    comp_hap_tracker_init(&t, 2, 6);
+    comp_hap_tracker_observe(&t, 0, 2, INT_MAX);
+    comp_hap_tracker_observe(&t, 3, 2, INT_MAX);
+    change(comp_hap_tracker_observe(&t, 2, 2, INT_MAX), 0, 0, 0, 2);
+    comp_hap_tracker_free(&t);
+    /* A polled heap sifts its last node down past an equal child only when
+     * that child is the smaller, taking the left of two equal children. */
+    comp_hap_tracker_init(&t, 4, 6);
+    comp_hap_tracker_observe(&t, 1, 0, INT_MAX);
+    comp_hap_tracker_observe(&t, 2, 1, INT_MAX);
+    comp_hap_tracker_observe(&t, 4, 1, INT_MAX);
+    comp_hap_tracker_observe(&t, 5, 2, INT_MAX);
+    comp_hap_tracker_observe(&t, 1, 2, INT_MAX);
+    change(comp_hap_tracker_observe(&t, 0, 3, INT_MAX), 1, 2, 0, 2);
+    comp_hap_tracker_free(&t);
+    puts("PASS java.util.PriorityQueue order for equal keys on offer and poll");
+
     comp_hap_tracker_init(&t, 1, 21);
     comp_hap_tracker_observe(&t, 10, 0, 3);
     change(comp_hap_tracker_observe(&t, 20, 0, 3), 0, 10, 0, 0);

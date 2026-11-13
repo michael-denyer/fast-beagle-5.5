@@ -106,6 +106,7 @@ step core tracker make check-tracker
 step core oom make check-oom
 step core interval make check-interval
 step core markers make check-markers
+step core line-reader make check-line-reader
 step core block-reader make check-block-reader
 step core sliding-window make check-sliding-window
 step core snv-perms make check-snv-perms
