@@ -184,7 +184,7 @@ FwdStep ==
              markMasked == t1[c] = "MASKED" /\ Ratio(passMasked)
              t2 == IF markMasked THEN [t1 EXCEPT ![c] = "PHASED"] ELSE t1
          IN  /\ isHet \/ (swap = FALSE /\ pass = FALSE)
-             /\ MissOrMasked(t1[c]) \/ passMasked = FALSE
+             /\ isMM \/ passMasked = FALSE
              /\ types' = [types EXCEPT ![s] = t2]
              /\ IF isHet
                   THEN /\ hetR' = [hetR EXCEPT ![c] = fUnph]

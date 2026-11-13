@@ -76,8 +76,6 @@ TrueStep(i) == map[segs[i].hap]
 Min(X) == CHOOSE x \in X : \A y \in X : x <= y
 Slots == [i \in 1 .. Len(heap) |-> <<segs[i].hap, segs[i].start>>]
 
-Untracked(h, st) == map[h] = NIL
-
 TypeOK ==
     /\ segs \in Seq(Seg) /\ Len(segs) <= MaxStates
     /\ heap \in Seq(1 .. MaxStates)
@@ -104,7 +102,7 @@ Observe(h, st) ==
     /\ cur' = [hap |-> h, step |-> st, tracked |-> map[h] # NIL]
     /\ before' = Slots /\ change' = NoChange
     /\ lastStep' = st /\ events' = events + 1
-    /\ pc' = IF Untracked(h, st) THEN "repair" ELSE "set"
+    /\ pc' = IF map[h] = NIL THEN "repair" ELSE "set"
     /\ UNCHANGED <<segs, heap, map, phase, evictOk>>
 
 (* One pass of update_head_of_q: a head whose key is behind its haplotype's
