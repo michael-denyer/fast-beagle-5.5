@@ -64,6 +64,23 @@ gzip -dc "$DATA/target.vcf.gz" | LC_ALL=C awk 'BEGIN {OFS = "\t"} /^#/ {print; n
   !done {$10 = sprintf("%c%c", 217, 161) substr($10, 2); done = 1} {print}' | gzip > "$OUT/one-char.vcf.gz"
 check one-char-allele "ERROR: Invalid allele [$(printf '\331\241')]" gt="$OUT/one-char.vcf.gz" out="$OUT/one-char-out"
 
+# VcfIt reads a block of 1024 lines before it parses them, so when the stream
+# ends early inside the block that holds a bad line, the read error comes first.
+awk 'BEGIN {
+  srand(7)
+  print "##fileformat=VCFv4.2"
+  h = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT"
+  for (s = 1; s <= 100; s++) h = h "\tS" s
+  print h
+  for (r = 1; r <= 900; r++) {
+    line = "1\t" (r * 100) "\t.\tA\tC\t.\t.\t.\tGT"
+    for (s = 1; s <= 100; s++) line = line "\t" (r == 2 && s == 1 ? "1|x" : int(rand() * 2) "|" int(rand() * 2))
+    print line
+  }
+}' | gzip > "$OUT/whole.vcf.gz"
+head -c $(($(wc -c < "$OUT/whole.vcf.gz") * 3 / 4)) "$OUT/whole.vcf.gz" > "$OUT/in-bad-cut.vcf.gz"
+check bad-line-then-cut "Error reading $OUT/in-bad-cut.vcf.gz" gt="$OUT/in-bad-cut.vcf.gz" out="$OUT/bad-cut"
+
 # Window 1 is a lone marker, which MarkerMap rejects, and window 2 holds a bad
 # allele, in the target or in the reference's second block of 1024 lines. The
 # port reads window 2 while window 1 is phased but reports window 1's error.
