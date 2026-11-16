@@ -32,7 +32,9 @@ typedef struct {
     bool have_line;     /* line holds the next unread data line */
     /* The batch: recs[next..n) are not yet returned. A parse error, and an
      * error reading the lines after lines[n - 1], are raised when the record
-     * they follow is returned, as when each line was parsed on demand. */
+     * they follow is returned, as when each line was parsed on demand. The
+     * read error is raised in place of the batch's parse errors, because
+     * VcfIt.fillStringBuffer reads a batch's lines before any is parsed. */
     kstring_t lines[VCF_IT_BATCH];
     gt_rec *recs[VCF_IT_BATCH];
     char *errors[VCF_IT_BATCH];
@@ -128,8 +130,8 @@ static void *vcf_it_next(void *self) {
             fill_batch(it);
         }
         int j = it->next++;
+        if (it->read_error != NULL && (it->errors[j] != NULL || it->next == it->n)) util_exit("%s", it->read_error);
         if (it->errors[j] != NULL) util_exit("%s", it->errors[j]);
-        if (it->next == it->n && it->read_error != NULL) util_exit("%s", it->read_error);
         gt_rec *rec = it->recs[j];
         if (filter_accept_marker(it->exclude, &rec->marker)) {
             if (trace_on()) trace_rec(rec);
