@@ -7,7 +7,8 @@
 (* failed read ends the batch and is kept in read_error. vcf_it_next       *)
 (* returns the records of the batch in order. It raises a line's parse     *)
 (* error when that record is reached, and read_error when the batch's last *)
-(* record is reached, before the marker filter. Lines 1..N are the data    *)
+(* record is reached, before the marker filter. read_error is raised in    *)
+(* place of a parse error in its batch. Lines 1..N are the data            *)
 (* lines after the header. Init chooses each line's fate (Kind) and the    *)
 (* line whose following read fails (FailAt, 0 for none). Reading line 1    *)
 (* happens in vcf_it_open, outside util_try, and is not modeled. Each step *)
@@ -38,11 +39,18 @@ ReadErr(i) == [k |-> "read", line |-> i]
 End == [k |-> "end", line |-> 0]
 Raised(o) == o.k \in {"parse", "read"}
 
+(* Beagle 5.5's VcfIt.fillStringBuffer reads lines in blocks of Batch, from
+   the first data line, and a failed read ends the file. *)
+SameBlock(i, j) == (i - 1) \div Batch = (j - 1) \div Batch
+
 (* The same records and errors when every line is read, parsed and filtered
-   on demand, as the comment on vcf_it says. *)
+   on demand, as the comment on vcf_it says, except that a read failing in a
+   block is reported ahead of the block's bad lines, because fillStringBuffer
+   reads a whole block before any of it is parsed. *)
 RECURSIVE OnDemand(_)
 OnDemand(i) ==
     IF i > N THEN <<End>>
+    ELSE IF Kind[i] = "bad" /\ FailAt # 0 /\ SameBlock(i, FailAt) THEN <<ReadErr(FailAt)>>
     ELSE IF Kind[i] = "bad" THEN <<ParseErr(i)>>
     ELSE IF FailAt = i THEN <<ReadErr(i)>>
     ELSE IF Kind[i] = "excl" THEN OnDemand(i + 1)
@@ -112,8 +120,9 @@ Take ==
     /\ LET i == batch[next + 1]
            last == next + 1 = Len(batch)
        IN  /\ next' = next + 1
-           /\ CASE Kind[i] = "bad" -> out' = Append(out, ParseErr(i)) /\ pc' = "idle"
-                [] last /\ readErr -> out' = Append(out, ReadErr(i)) /\ pc' = "idle"
+           /\ CASE readErr /\ (Kind[i] = "bad" \/ last) ->
+                     out' = Append(out, ReadErr(batch[Len(batch)])) /\ pc' = "idle"
+                [] Kind[i] = "bad" -> out' = Append(out, ParseErr(i)) /\ pc' = "idle"
                 [] Kind[i] = "excl" -> UNCHANGED <<out, pc>>
                 [] OTHER -> out' = Append(out, Rec(i)) /\ pc' = "idle"
     /\ UNCHANGED <<Kind, FailAt, pos, have, batch, readErr>>
