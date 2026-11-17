@@ -100,9 +100,11 @@ static void print_nanos(run_stats *rs, const char *message, int64_t nanos) {
     duo_print(rs, "%-31s%s\n", message, elapsed(buf, sizeof buf, nanos));
 }
 
-void run_stats_open(run_stats *rs, const par *p, const char *log_path, const char *program) {
+void run_stats_open(run_stats *rs, const par *p, const run_outputs *out, const char *program) {
+    const char *log_path = run_outputs_path(out, RUN_OUTPUT_LOG), *conflict;
     *rs = (run_stats){.par = p, .log_path = log_path, .start_nanos = run_stats_nanos()};
-    rs->log = fopen(rs->log_path, "w");
+    rs->log = run_outputs_open_stream(out, RUN_OUTPUT_LOG, &conflict);
+    if (conflict) util_exit(PROGRAM ": output file %s aliases %s", log_path, conflict);
     if (rs->log == NULL) util_exit("Error opening %s", rs->log_path);
     util_exit_log(rs->log);
     /* Java's System.out flushes at each line; a pipe would otherwise hold the

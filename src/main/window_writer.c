@@ -265,7 +265,7 @@ void window_writer_open(window_writer *ww, const par *p, const run_outputs *out,
     ww->bgen = p->bgen != BGEN_NONE ? bgen_writer_open(p, out, s) : NULL;
     ww->path = run_outputs_path(out, RUN_OUTPUT_VCF);
     ww->n_written = 0;
-    ww->out = bgzf_open(ww->path, "w");
+    ww->out = bgzf_dopen(run_outputs_open_vcf(out), "w");
     if (ww->out == NULL) util_exit("Error opening %s", ww->path);
     if (p->nthreads > 1 && bgzf_mt(ww->out, p->nthreads, 256) != 0) util_exit("Error opening %s", ww->path);
 

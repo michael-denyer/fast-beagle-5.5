@@ -12,8 +12,7 @@
 typedef struct vcf_index vcf_index;
 
 /* The index of vcf_path, written to tbi_path, whose header lines are
- * u_header_end uncompressed bytes. Removes any existing tbi_path, so that a
- * run that fails leaves no stale index. */
+ * u_header_end uncompressed bytes. */
 vcf_index *vcf_index_new(const char *vcf_path, const char *tbi_path, uint64_t u_header_end);
 /* A record whose line ends at uncompressed offset u_end, just past its
  * newline. line[0, info_end) runs through the INFO column and line[info_end]

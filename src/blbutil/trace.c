@@ -8,8 +8,10 @@
 #include <string.h>
 
 #include "blbutil/utilities.h"
+#include "main/run_outputs.h"
 
 static const char *trace_dir;
+static const run_outputs *trace_outputs;
 static struct {
     char *name;
     FILE *out;
@@ -19,7 +21,8 @@ static int n_seams, seams_cap;
  * and each line are written under one lock. */
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-void trace_init(const char *dir) {
+void trace_init(const char *dir, const run_outputs *outputs) {
+    trace_outputs = outputs;
     trace_dir = dir;
 }
 
@@ -35,13 +38,17 @@ static FILE *seam_file(const char *seam) {
         seams_cap = seams_cap == 0 ? 32 : 2 * seams_cap;
         seams = util_realloc(seams, (size_t)seams_cap * sizeof *seams);
     }
-    char path[4096];
-    snprintf(path, sizeof path, "%s/%s.txt", trace_dir, seam);
-    FILE *out = fopen(path, "w");
+    size_t size = strlen(trace_dir) + strlen(seam) + sizeof "/.txt";
+    char *path = util_malloc(size);
+    snprintf(path, size, "%s/%s.txt", trace_dir, seam);
+    const char *conflict;
+    FILE *out = run_outputs_open_trace(trace_outputs, path, &conflict);
     if (out == NULL) {
         pthread_mutex_unlock(&lock);   /* util_exit can return to a util_try */
+        if (conflict) util_exit(PROGRAM ": trace file %s aliases %s", path, conflict);
         util_exit("Error opening %s", path);
     }
+    free(path);
     seams[n_seams].name = util_strndup(seam, strlen(seam));
     seams[n_seams].out = out;
     ++n_seams;

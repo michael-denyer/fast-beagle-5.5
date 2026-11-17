@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "main/par.h"
+#include "main/run_outputs.h"
 #include "phase/fixed_phase_data.h"
 #include "phase/phase_data.h"
 #include "vcf/sliding_window.h"
@@ -33,10 +33,10 @@ typedef struct {
 /* A monotonic clock reading for timing the steps reported here. */
 int64_t run_stats_nanos(void);
 
-/* new RunStats(par) and printStartInfo(): creates log_path and prints the
+/* new RunStats(par) and printStartInfo(): opens the run's log and prints the
  * banner, start time and command line. From here until run_stats_close, an
  * error message also goes to the log. */
-void run_stats_open(run_stats *rs, const par *p, const char *log_path, const char *program);
+void run_stats_open(run_stats *rs, const par *p, const run_outputs *out, const char *program);
 /* printSampleSummary */
 void run_stats_sample_summary(run_stats *rs, int n_ref_samples, int n_targ_samples);
 /* printWindowUpdate */

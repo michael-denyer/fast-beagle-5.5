@@ -2,7 +2,7 @@
 #ifndef BGEN_BGEN_FILES_H
 #define BGEN_BGEN_FILES_H
 
-#include <stdio.h>
+#include "main/run_outputs.h"
 
 /* Removal of partial BGEN output at process exit. A run creates at most the
  * three members (.bgen, .info, .sample); exit removes the ones it created
@@ -12,10 +12,10 @@
 
 /* Once, before starting any thread that can exit. */
 void bgen_files_register_cleanup(void);
-/* fopen(path, "wb"), recording path for removal; path is borrowed until
- * exit or completion. Returns NULL on an open error or after exit cleanup or
- * completion. */
-FILE *bgen_files_open(const char *path);
+/* Open a checked destination for writing and borrow its path until exit or
+ * completion. An alias is fatal. An open error or a call after cleanup or
+ * completion returns NULL. */
+FILE *bgen_files_open(const run_outputs *out, run_output_file file);
 /* After every member is written and closed: exit keeps them. */
 void bgen_files_complete(void);
 

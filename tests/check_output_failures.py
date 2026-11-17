@@ -119,6 +119,97 @@ class OutputFailures(unittest.TestCase):
                         if ext not in (first, second):
                             self.assertFalse(Path(str(prefix) + ext).exists(), f"unexpected {ext}")
 
+    def test_dangling_output_aliases(self):
+        for suffix in (".vcf.gz", ".info", ".sample"):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                target = root / "input.vcf"
+                target.write_text(VCF)
+                prefix = root / "result"
+                shared = root / "shared"
+                (root / "result.log").symlink_to("shared")
+                Path(str(prefix) + suffix).symlink_to("result.log")
+                args = {"gt": target, "out": prefix, "bgen": "phased"}
+                proc = run(args)
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertIn("result.log", proc.stderr)
+                self.assertIn("result" + suffix, proc.stderr)
+                self.assertTrue((root / "result.log").is_symlink())
+                self.assertFalse(shared.exists() and shared.stat().st_size > 0)
+                Path(str(prefix) + suffix).unlink()
+                proc = run(args)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertIn("finished", shared.read_text())
+
+    def test_trace_preserves_inputs(self):
+        for kind in ("direct", "hardlink", "symlink"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                seam = root / "T2.txt"
+                target = seam if kind == "direct" else root / "target.vcf"
+                target.write_text(VCF)
+                if kind == "hardlink":
+                    os.link(target, seam)
+                elif kind == "symlink":
+                    seam.symlink_to(target)
+                proc = run({"gt": target, "out": root / "result", "trace": root})
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertIn(str(seam), proc.stderr)
+                self.assertEqual(target.read_text(), VCF)
+
+    def test_vcf_replacement_invalidates_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target, index = root / "target.vcf", root / "result.vcf.gz.tbi"
+            target.write_text(VCF)
+            args = {"gt": target, "out": root / "result"}
+            proc = run({**args, "tbi": "true"})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            old_index = index.read_bytes()
+            target.write_text(VCF.replace("\n1\t", "\n2\t"))
+            # Even when index generation is disabled, a declared input is protected.
+            proc = run({**args, "truth": index})
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertEqual(index.read_bytes(), old_index)
+            proc = run(args)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertFalse(index.exists())
+            with gzip.open(root / "result.vcf.gz", "rt") as f:
+                self.assertEqual([row.split("\t")[0] for row in f if not row.startswith("#")], ["2", "2"])
+
+    def test_reserved_plink_sample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target.vcf"
+            target.write_text(VCF.replace("S1", "0"))
+            args = {"gt": target, "out": root / "result"}
+            proc = run({**args, "bgen": "plink2"})
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("sample ID cannot be '0'", proc.stderr)
+            for suffix in (".bgen", ".sample", ".info"):
+                self.assertFalse((root / ("result" + suffix)).exists())
+            exclude = root / "exclude.txt"
+            exclude.write_text("0\n")
+            proc = run({**args, "bgen": "plink2", "excludesamples": exclude})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            proc = run({**args, "bgen": "phased"})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_chromosome_whitespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target.vcf"
+            for char in ("\u1680", "\u2003", "\u2028", "\u3000", "\u00a0", "\u2007", "\u202f", "\U0001f9ec"):
+                with self.subTest(char=hex(ord(char))):
+                    chrom = f"chr{char}1"
+                    target.write_text(VCF.replace("\n1\t", f"\n{chrom}\t"))
+                    proc = run({"gt": target, "out": root / "result"})
+                    if char in "\u1680\u2003\u2028\u3000":
+                        self.assertEqual(proc.returncode, 1, proc.stderr)
+                        self.assertIn("CHROM field contains whitespace", proc.stderr)
+                    else:
+                        self.assertEqual(proc.returncode, 0, proc.stderr)
+
     def test_outputs_may_share_a_device(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

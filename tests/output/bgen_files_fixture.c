@@ -19,7 +19,7 @@ static void fail(void *arg) {
 }
 
 static void write_member(run_output_file file, const char *text) {
-    FILE *stream = bgen_files_open(run_outputs_path(outputs, file));
+    FILE *stream = bgen_files_open(outputs, file);
     if (stream == NULL) util_exit("fixture open failed");
     if (fputs(text, stream) == EOF || fclose(stream) != 0) util_exit("fixture write failed");
 }
@@ -31,7 +31,7 @@ static void *late_open(void *arg) {
     pthread_mutex_unlock(&mutex);
     /* A completion notification during abort must not enable a new open. */
     bgen_files_complete();
-    FILE *stream = bgen_files_open(run_outputs_path(outputs, RUN_OUTPUT_SAMPLE));
+    FILE *stream = bgen_files_open(outputs, RUN_OUTPUT_SAMPLE);
     reopened = stream != NULL;
     if (stream != NULL) fclose(stream);
     return NULL;
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     bgen_files_register_cleanup();
     if (aborting && pthread_create(&late_thread, NULL, late_open, NULL) != 0) return 2;
 
-    FILE *stream = bgen_files_open(run_outputs_path(outputs, RUN_OUTPUT_BGEN));
+    FILE *stream = bgen_files_open(outputs, RUN_OUTPUT_BGEN);
     if (stream == NULL) return 2;
     if (strcmp(mode, "caught") == 0) {
         char *error = util_try(fail, NULL);
