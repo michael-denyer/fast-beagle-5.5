@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "blbutil/utilities.h"
+
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static const char *created[3];
 static int n_created;
@@ -24,12 +26,14 @@ void bgen_files_register_cleanup(void) {
     atexit(remove_partial);
 }
 
-FILE *bgen_files_open(const char *path) {
+FILE *bgen_files_open(const run_outputs *out, run_output_file file) {
+    const char *path = run_outputs_path(out, file), *conflict = NULL;
     pthread_mutex_lock(&lock);
     assert(n_created < (int)(sizeof created / sizeof *created));
-    FILE *stream = finished ? NULL : fopen(path, "wb");
+    FILE *stream = finished ? NULL : run_outputs_open_stream(out, file, &conflict);
     if (stream != NULL) created[n_created++] = path;
     pthread_mutex_unlock(&lock);
+    if (conflict) util_exit(PROGRAM ": output file %s aliases %s", path, conflict);
     return stream;
 }
 

@@ -171,6 +171,26 @@ static void chroms(const char *path, int nthreads) {
     check("chroms", path, nthreads);
 }
 
+/* A two-base deletion straddles a 16 kb bin boundary. Its short END must
+ * not remove the bin that contains the second REF base from the index. */
+static void short_end(const char *path, int nthreads) {
+    writer w;
+    open_writer(&w, path, nthreads);
+    header(&w, 0);
+    start_index(&w, path);
+    record(&w, "1", 16384, "AA", "END=16384", 3, 0);
+    close_writer(&w);
+    tbx_t *tbx = tbx_index_load(path);
+    if (tbx == NULL) exit(2);
+    hts_itr_t *it = tbx_itr_queryi(tbx, 0, 16384, 16385);
+    if (it == NULL || it->n_off == 0) {
+        fprintf(stderr, "FAIL short END loses the second REF base at 1:16385\n");
+        ++failures;
+    }
+    hts_itr_destroy(it);
+    tbx_destroy(tbx);
+}
+
 static void header_on_boundary(const char *path, int nthreads, int n_recs) {
     writer w;
     open_writer(&w, path, nthreads);
@@ -202,6 +222,9 @@ int main(int argc, char **argv) {
         kstring_t path = {0, 0, NULL};
         ksprintf(&path, "%s/chroms.t%d.vcf.gz", argv[1], threads[t]);
         chroms(path.s, threads[t]);
+        path.l = 0;
+        ksprintf(&path, "%s/short-end.t%d.vcf.gz", argv[1], threads[t]);
+        short_end(path.s, threads[t]);
         path.l = 0;
         ksprintf(&path, "%s/boundary.t%d.vcf.gz", argv[1], threads[t]);
         header_on_boundary(path.s, threads[t], 5);

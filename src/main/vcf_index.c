@@ -30,7 +30,6 @@ struct vcf_index {
 };
 
 vcf_index *vcf_index_new(const char *vcf_path, const char *tbi_path, uint64_t u_header_end) {
-    remove(tbi_path);
     vcf_index *x = util_malloc(sizeof *x);
     *x = (vcf_index){.vcf_path = util_strndup(vcf_path, strlen(vcf_path)),
         .tbi_path = util_strndup(tbi_path, strlen(tbi_path)), .u_header_end = u_header_end,
@@ -39,7 +38,7 @@ vcf_index *vcf_index_new(const char *vcf_path, const char *tbi_path, uint64_t u_
 }
 
 /* tbx_parse1 (htslib tbx.c) for tbx_conf_vcf, which htslib does not export:
- * 0-based POS, and POS + length(REF) or else an INFO END= past POS. Returns
+ * 0-based POS and the greater of POS + length(REF) and INFO/END. Returns
  * false where tabix skips the line. */
 static bool parse(char *line, size_t len, char **chrom_end, hts_pos_t *beg, hts_pos_t *end) {
     *chrom_end = NULL;
@@ -66,7 +65,7 @@ static bool parse(char *line, size_t len, char **chrom_end, hts_pos_t *beg, hts_
             else if (s != NULL && (s = strstr(line + b, ";END=")) != NULL) s += 5;
             if (s != NULL && *s != '.') {
                 long long info_end = strtoll(s, NULL, 0);
-                if (info_end > *beg) *end = info_end;
+                if (info_end > *end) *end = info_end;
             }
             line[i] = c;
         }

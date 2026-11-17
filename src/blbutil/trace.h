@@ -5,9 +5,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+struct run_outputs;
+
 /* Trace seams for comparison with the Java trace build (java/trace.patch).
  * Enabled by trace=<dir>; each seam writes <dir>/<seam>.txt. */
-void trace_init(const char *dir);
+void trace_init(const char *dir, const struct run_outputs *outputs);
 bool trace_on(void);
 void trace_line(const char *seam, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 void trace_close(void);

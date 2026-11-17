@@ -17,6 +17,7 @@
 #include "beagleutil/chrom_ids.h"
 #include "blbutil/utilities.h"
 #include "jcompat/jnum.h"
+#include "jcompat/jutf8.h"
 
 #include <htslib/kstring.h>
 
@@ -117,8 +118,11 @@ static int n_text_alleles(const char *alt, const char *end) {
     return n;
 }
 
-static bool is_java_whitespace(char c) {
-    return c == ' ' || (c >= '\t' && c <= '\r') || (c >= 0x1c && c <= 0x1f);
+/* Character.isWhitespace excludes the three non-breaking space characters. */
+static bool is_java_whitespace(int32_t c) {
+    return (c >= 0x09 && c <= 0x0d) || (c >= 0x1c && c <= 0x20)
+            || c == 0x1680 || (c >= 0x2000 && c <= 0x200a && c != 0x2007)
+            || c == 0x2028 || c == 0x2029 || c == 0x205f || c == 0x3000;
 }
 
 static int32_t parse_pos(const char *s, const char *end) {
@@ -147,8 +151,11 @@ void marker_parse(marker *m, const char *rec, size_t len) {
     if (chrom_len == 0 || (chrom_len == 1 && rec[0] == '.')) {
         util_exit("ERROR: missing chromosome: %.*s", truncate80(len), rec);
     }
-    for (size_t j = 0; j < chrom_len; ++j) {
-        if (is_java_whitespace(rec[j])) {
+    for (size_t j = 0; j < chrom_len;) {
+        int32_t c = (unsigned char)rec[j];
+        if (c < 0x80) ++j;
+        else if ((c = jutf8_next_bmp(rec, chrom_len, &j)) < 0) ++j;
+        if (is_java_whitespace(c)) {
             util_exit("ERROR: CHROM field contains whitespace: %.*s", truncate80(len), rec);
         }
     }

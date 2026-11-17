@@ -77,6 +77,9 @@ def main():
             [[0, top, 0]],
             [[top, 0, 0], [top, 0, 0]],
         ]
+        assert variants[3][4] == ["A", "."]
+        top, probs = decode(variants[3][-1], 3, 2)
+        assert probs == [[[top, 0], [top, 0]], [[top, 0]], [[top, 0], [top, 0]]]
         print("PASS BGEN captures probabilities before buffer reuse and VCF rounding")
 
 

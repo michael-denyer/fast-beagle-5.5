@@ -47,11 +47,13 @@ The writer starts from the values the VCF prints (rounded DS, printed DR2, GT ph
 - `bgen=plink2` supports only autosomes, 1-22 or 1-N with `bgen-chr-set=N`. plink2 needs sex information for chrX (chromosome `23` by default, `N+1` with `bgen-chr-set=N`), chrY and MT. It needs `--allow-extra-chr` for other contigs. `bgen=plink2` exits at the first such window.
 - If the filters remove every variant, the run exits with an error and writes no `.bgen`, as plink2 does.
 
+PLINK 2 reserves sample ID `0`. A `bgen=plink2` run refuses that ID among the samples selected for export.
+
 plink2 compresses BGEN with libdeflate at level 6, and zlib's own deflate gives different bytes. fast-beagle therefore compresses with the libdeflate 1.25 files in `third_party/libdeflate/`.
 
 ### `bgen=phased`
 
-`bgen=phased` writes `<out>.bgen` and `<out>.sample` with each haplotype's allele probabilities before the VCF rounds them. The file is BGEN v1.2 layout 2, phased, with `bgen-bits` bits per probability, and zlib-compressed. It holds every record the VCF has, including multiallelic records and every chromosome, under the VCF's chromosome name and ID. Alleles are in VCF order with REF first, so plink2 reads the file with `--bgen <out>.bgen ref-first`. Haploid samples have ploidy 1. Genotyped markers and phasing-only runs store the GT alleles as certain.
+`bgen=phased` writes `<out>.bgen` and `<out>.sample` with each haplotype's allele probabilities before the VCF rounds them. The file is BGEN v1.2 layout 2, phased, with `bgen-bits` bits per probability, and zlib-compressed. It holds every record the VCF has, including multiallelic records and every chromosome, under the VCF's chromosome name and ID. Alleles are in VCF order with REF first, so plink2 reads the file with `--bgen <out>.bgen ref-first`. Haploid samples have ploidy 1. Genotyped markers and phasing-only runs store the GT alleles as certain. At a reference-only site (`ALT=.`), the BGEN allele labels are REF and `.`, with probability one on REF for each haplotype.
 
 The writer scales each haplotype's probabilities to 2^N - 1 (255 at the default 8 bits). It rounds every value down, then adds one to the values with the largest remainders. On ties, lower alleles come first. The BGEN v1.2 specification suggests this method. The filters apply to `bgen=plink2` only.
 
@@ -68,7 +70,7 @@ Both `bgen=` modes also write `<out>.info`, the fields BGEN has no place for. Th
 
 If a `bgen=` run fails before the BGEN files are complete, it removes the `.bgen`, `.info` and `.sample` it has created. `bgen=phased` refuses nonfinite allele probabilities, which can arise with `err=0`, because BGEN cannot represent them. VCF-only output retains Beagle's `NaN` values.
 
-Before writing, fast-beagle refuses any log, VCF, BGEN, sidecar or tabix destination that names an input file, including aliases through symbolic or hard links. It also refuses two destinations that are the same file through a symbolic or hard link, because each writer would overwrite the other's output.
+Before writing, fast-beagle refuses any log, VCF, BGEN, sidecar or tabix destination that names an input file, including aliases through symbolic or hard links. It also refuses two outputs that resolve to the same regular file, even if a symlink initially has a missing target. Each file opened by `trace=` is checked against the inputs and the enabled output destinations before truncation.
 
 ## Log file and console output
 
@@ -89,4 +91,4 @@ An error message goes to standard error without Java's exception class or stack 
 
 ## Tabix index
 
-`tbi=true` (default `false`) also writes `<out>.vcf.gz.tbi`, byte-identical to the index `tabix -p vcf <out>.vcf.gz` builds, without a second pass over the VCF. The VCF is unchanged. [Architecture](architecture.md#tabix-index-in-the-same-pass) describes how `src/main/vcf_index.c` builds the index.
+`tbi=true` (default `false`) also writes `<out>.vcf.gz.tbi`, byte-identical to the index `tabix -p vcf <out>.vcf.gz` builds, without a second pass over the VCF. Replacing the VCF invalidates any existing tabix index at that prefix, including on a run with `tbi=false`. [Architecture](architecture.md#tabix-index-in-the-same-pass) describes how `src/main/vcf_index.c` builds the index.

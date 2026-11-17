@@ -42,6 +42,7 @@ typedef struct {
 
 struct bgen_writer {
     bgen_mode mode;
+    const run_outputs *outputs;
     FILE *bgen, *info_file;
     const char *bgen_path, *sample_path, *info_path;
     const samples *samples;
@@ -136,9 +137,14 @@ void bgen_writer_check_chrom(bgen_writer *bw, const char *chrom) {
 }
 
 bgen_writer *bgen_writer_open(const par *p, const run_outputs *out, const samples *s) {
+    if (p->bgen == BGEN_PLINK2) {
+        for (int j = 0; j < s->n; ++j)
+            if (strcmp(s->ids[j], "0") == 0) util_exit("bgen=plink2: sample ID cannot be '0'");
+    }
     bgen_writer *bw = util_malloc(sizeof *bw);
     *bw = (bgen_writer){0};
     bw->mode = p->bgen;
+    bw->outputs = out;
     bw->bgen_path = run_outputs_path(out, RUN_OUTPUT_BGEN);
     bw->sample_path = run_outputs_path(out, RUN_OUTPUT_SAMPLE);
     bw->info_path = run_outputs_path(out, RUN_OUTPUT_INFO);
@@ -153,9 +159,9 @@ bgen_writer *bgen_writer_open(const par *p, const run_outputs *out, const sample
     bw->n_missing = util_malloc((size_t)(s->n > 0 ? s->n : 1) * sizeof *bw->n_missing);
     for (int j = 0; j < s->n; ++j) bw->n_missing[j] = 0;
     bw->chrom_index = -1;
-    bw->bgen = bgen_files_open(bw->bgen_path);
+    bw->bgen = bgen_files_open(bw->outputs, RUN_OUTPUT_BGEN);
     if (bw->bgen == NULL) util_exit("Error opening %s", bw->bgen_path);
-    bw->info_file = bgen_files_open(bw->info_path);
+    bw->info_file = bgen_files_open(bw->outputs, RUN_OUTPUT_INFO);
     if (bw->info_file == NULL) util_exit("Error opening %s", bw->info_path);
     fputs("CHROM\tPOS\tID\tREF\tALT\tDR2\tAF\tIMP\n", bw->info_file);
 
@@ -541,7 +547,9 @@ static void finish_rec(bgen_scratch *sc, size_t zlen, span info, bgen_rec *rec) 
  * the VCF names it. */
 static void phased_encode(const bgen_writer *bw, bgen_scratch *sc, span info, bgen_rec *rec) {
     const marker *mk = rec->mk;
-    int n_alleles = marker_n_alleles(mk);
+    /* PLINK reads a reference-only site as REF and the missing ALT label ".".
+     * Every haplotype carries REF, so its stored probability is exactly one. */
+    int n_alleles = rec->n_alleles == 1 ? 2 : rec->n_alleles;
     sc->block.l = 0;
     phased_block(bw, sc, rec, n_alleles);
     size_t zlen = compress_block(sc);
@@ -653,7 +661,7 @@ void bgen_writer_put(bgen_writer *bw, bgen_rec *rec) {
 
 /* ExportOxSample: no phenotypes, FID 0, sex unknown. */
 static void write_sample_file(bgen_writer *bw) {
-    FILE *f = bgen_files_open(bw->sample_path);
+    FILE *f = bgen_files_open(bw->outputs, RUN_OUTPUT_SAMPLE);
     if (f == NULL) util_exit("Error opening %s", bw->sample_path);
     fputs("ID_1 ID_2 missing sex\n0 0 0 D\n", f);
     double recip = bw->n_variants == 0 ? 0.0 : 1.0 / (double)bw->n_variants;

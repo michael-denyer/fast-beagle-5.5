@@ -143,11 +143,11 @@ static void phase_window(beagle_run *run, const fixed_phase_data *fpd, int64_t s
 int main(int argc, char **argv) {
     par p;
     par_parse(&p, argc - 1, argv + 1);
-    if (p.trace != NULL) trace_init(p.trace);
     run_outputs *outputs = run_outputs_new(&p);
+    if (p.trace != NULL) trace_init(p.trace, outputs);
     bgen_files_register_cleanup();
     beagle_run run = {.p = &p};
-    run_stats_open(&run.rs, &p, run_outputs_path(outputs, RUN_OUTPUT_LOG), argv[0]);
+    run_stats_open(&run.rs, &p, outputs, argv[0]);
     run.sw = sliding_window_open(&p);
     window_writer_open(&run.ww, &p, outputs, sliding_window_targ_samples(run.sw));
     jrandom rand;
