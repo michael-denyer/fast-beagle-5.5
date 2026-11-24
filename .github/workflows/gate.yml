@@ -31,8 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: read
-      pull-requests: read
+      actions: read # find the last successful scheduled run on main
+      pull-requests: read # list the files a PR changes to pick the tier
     outputs:
       run: ${{ steps.plan.outputs.run }}
       tier: ${{ steps.plan.outputs.tier }}
