@@ -45,3 +45,7 @@ repos:
     rev: 916ad0aaa108c64d294101002066f530ea170b10  # v0.23.3
     hooks:
       - id: markdownlint-cli2
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
+    hooks:
+      - id: gitleaks
