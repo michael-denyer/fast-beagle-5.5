@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      checks: read
+      checks: read # verify the gate check on the tagged or manually selected commit
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
