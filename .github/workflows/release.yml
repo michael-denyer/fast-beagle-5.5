@@ -3,15 +3,14 @@ name: release
 # Builds the release artifacts from one source tarball and proves each binary
 # byte-identical to Beagle 5.5 with tests/check-oracle.sh: the conda package
 # built from release/conda/ on each platform, and a portable binary with htslib
-# linked statically on each platform. It also builds a signed and notarised
-# macOS installer of the macOS binary. A pushed v5.5.<n> tag then publishes the
-# GitHub Release. Pull requests and manual runs do everything but publish, and
-# a manual run fails unless its commit is on main and passed the gate.
+# linked statically on each platform. PRs and manual runs build an unsigned
+# macOS installer. A protected v5.5.<n> tag push signs, notarises and
+# publishes the release after the main ancestry and gate checks.
 # docs/release.md describes the release steps.
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v5.5.*']
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -40,12 +39,20 @@ jobs:
   source:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read # verify the gate check on the tagged or manually selected commit
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Require a protected release tag on push
+        if: github.event_name == 'push' && !github.ref_protected
+        run: |
+          echo "::error::Release tags must be protected by a tag ruleset"
+          exit 1
       - id: version
         env:
           REF_TYPE: ${{ github.ref_type }}
@@ -271,14 +278,24 @@ jobs:
           path: fast-beagle-${{ env.VERSION }}/dist/${{ env.PACKAGE }}.tar.gz
           if-no-files-found: error
 
-  # The macOS installer: the binary of the macos-arm64 package in a .pkg that
-  # installs it as /usr/local/bin/fast-beagle (release/build-pkg.sh). The binary
-  # and the installer are signed with the Developer ID certificates and the
-  # installer is notarised. The job then installs the .pkg and runs the
-  # installed binary. A pull request from a fork has no secrets and skips it.
+      - name: Build and test the unsigned installer
+        if: runner.os == 'macOS' && github.event_name != 'push'
+        run: |
+          "fast-beagle-$VERSION/release/build-pkg.sh" --unsigned "$VERSION" "unpacked/$PACKAGE" pkg
+          "fast-beagle-$VERSION/release/test-pkg.sh" "pkg/$PACKAGE-unsigned.pkg"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: runner.os == 'macOS' && github.event_name != 'push'
+        with:
+          name: preview-pkg-macos-arm64
+          path: pkg/${{ env.PACKAGE }}-unsigned.pkg
+          if-no-files-found: error
+
+  # A fresh runner receives signing credentials only after the source job
+  # validates the tag version, commit ancestry and successful gate.
   macos-pkg:
     needs: [source, binaries]
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_protected
+    environment: apple-signing
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -305,10 +322,11 @@ jobs:
           security create-keychain -p "$password" "$keychain"
           security set-keychain-settings -lut 3600 "$keychain"
           security unlock-keychain -p "$password" "$keychain"
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/cert.p12"' EXIT
           base64 --decode <<< "$MACOS_CERT_P12" > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" \
             -T /usr/bin/codesign -T /usr/bin/pkgbuild
-          rm "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
           security list-keychains -d user -s "$keychain"
       - name: Build, sign and notarise the installer
@@ -320,22 +338,15 @@ jobs:
           tar -xzf "dist/fast-beagle-$VERSION.tar.gz"
           mkdir unpacked
           tar -xzf "dist/$PACKAGE.tar.gz" -C unpacked
-          printf '%s\n' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          trap 'rm -f "$RUNNER_TEMP/notary.p8"' EXIT
+          (umask 077 && printf '%s\n' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8")
           NOTARY_KEY="$RUNNER_TEMP/notary.p8" "fast-beagle-$VERSION/release/build-pkg.sh" "$VERSION" "unpacked/$PACKAGE" pkg
-          rm "$RUNNER_TEMP/notary.p8"
       - name: Remove the keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db"
-      # The recipe's test, on the binary the installer put in place.
-      - name: Install the package and run the binary
+      - name: Install the signed package and run the binary
         run: |
-          sudo installer -pkg "pkg/$PACKAGE.pkg" -target /
-          codesign --verify --strict --verbose=2 /usr/local/bin/fast-beagle
-          brew list htslib > /dev/null 2>&1 || brew install htslib
-          cd "fast-beagle-$VERSION/release/conda"
-          /usr/local/bin/fast-beagle gt=small.vcf out="$RUNNER_TEMP/small" nthreads=2
-          test "$(bgzip -dc "$RUNNER_TEMP/small.vcf.gz" | grep -vc '^#')" = 40
-          echo "$PACKAGE.pkg: signed, notarised, installed and run" >> "$GITHUB_STEP_SUMMARY"
+          "fast-beagle-$VERSION/release/test-pkg.sh" "pkg/$PACKAGE.pkg"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: release-pkg-macos-arm64
@@ -345,7 +356,7 @@ jobs:
   # Publishes the release from a pushed tag once every build and check passed.
   publish:
     needs: [source, conda, binaries, macos-pkg]
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_protected
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
